@@ -167,7 +167,7 @@ describe('Users', () => {
   });
 
   test('POST /users/:id/avatar by owner token', async () => {
-    const avatar = await client.readFile('./old/pro/migrations/users/test/static/1.png');
+    const avatar = await client.readFile('./tests/static/1.png');
     const response = await client.postFormRequest(`/users/${ownerUserId}/avatar`, { avatar }, tokens.registered);
     const json = await response?.json();
 
