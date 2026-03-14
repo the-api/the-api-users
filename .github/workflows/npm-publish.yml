@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'
 
 concurrency:
   group: npm-publish-${{ github.ref }}
@@ -24,8 +26,31 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Start test services
+        run: docker compose -f tests/docker-compose.yml up -d
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            if docker exec the_api_postgres_test pg_isready -U postgres -d postgres; then
+              echo "Postgres is ready"
+              exit 0
+            fi
+
+            echo "Waiting for Postgres... ($i/30)"
+            sleep 2
+          done
+
+          echo "Postgres did not become ready in time"
+          docker compose -f tests/docker-compose.yml logs
+          exit 1
+
       - name: Run tests
-        run: bun test
+        run: bun run test
+
+      - name: Stop test services
+        if: always()
+        run: docker compose -f tests/docker-compose.yml down
 
   publish:
     needs: test
