@@ -52,6 +52,7 @@ export type UserRecord = {
   emailChangeCode?: string | null;
   emailChangeCodeAttempts?: number;
   timeEmailChangeCodeExpired?: Date | string | null;
+  oauthProviders?: Record<string, unknown> | null;
   [key: string]: unknown;
 };
 
@@ -103,12 +104,21 @@ export const requireAuth = (c: AppContext): AuthUser => {
   return user;
 };
 
+export const isUserIdentityVerified = (
+  user: Partial<UserRecord> | AuthUser | null | undefined,
+): boolean => {
+  if (!user) return false;
+  if (user.isEmailVerified && !!user.email) return true;
+  if (user.isPhoneVerified && !!user.phone) return true;
+  return !!user.role && String(user.role) !== UNVERIFIED_ROLE;
+};
+
 export const getUserRoles = (user: Partial<UserRecord> | AuthUser | null | undefined): string[] => {
   const roles = Array.isArray(user?.roles)
     ? user?.roles
     : user?.role
       ? [String(user.role)]
-      : [user?.isEmailVerified ? VERIFIED_ROLE : UNVERIFIED_ROLE];
+      : [isUserIdentityVerified(user) ? VERIFIED_ROLE : UNVERIFIED_ROLE];
 
   return Array.from(new Set(roles.filter(Boolean).map(String)));
 };

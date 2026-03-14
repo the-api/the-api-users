@@ -20,6 +20,7 @@ export const USER_HIDDEN_FIELDS = [
   'emailChangeCodeAttempts',
   'timeEmailChangeCodeExpired',
   'emailToChange',
+  'oauthProviders',
   'email',
   'phone',
 ];

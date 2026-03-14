@@ -109,6 +109,7 @@ const USERS_READ_ONLY_FIELDS = [
   'emailChangeCodeAttempts',
   'timeEmailChangeCodeExpired',
   'emailToChange',
+  'oauthProviders',
   'avatar',
 ];
 

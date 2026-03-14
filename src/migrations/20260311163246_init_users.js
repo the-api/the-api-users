@@ -8,11 +8,11 @@ exports.up = (knex) => knex.schema
     table.boolean('isDeleted').notNullable().defaultTo(false);
 
     table.string('login', 255).unique();
-    table.string('password', 255).notNullable();
-    table.string('salt', 255).notNullable();
+    table.string('password', 255).nullable();
+    table.string('salt', 255).nullable();
     table.timestamp('timePasswordChanged');
 
-    table.string('email', 1024).notNullable().unique();
+    table.string('email', 1024).nullable();
     table.boolean('isEmailVerified').notNullable().defaultTo(false);
     table.boolean('isEmailInvalid').notNullable().defaultTo(false);
 
@@ -20,18 +20,20 @@ exports.up = (knex) => knex.schema
     table.boolean('isPhoneVerified').notNullable().defaultTo(false);
     table.boolean('isPhoneInvalid').notNullable().defaultTo(false);
 
-    table.string('fullName', 255);
+    table.string('fullName', 1024);
+    table.string('displayName', 255);
 
     table.string('avatar', 2048);
 
     table.string('role', 128);
 
-    //locale, timezone
     table.string('locale', 32);
     table.string('timezone', 32);
 
     table.string('refresh', 255);
     table.timestamp('timeRefreshExpired');
+
+    table.jsonb('oauthProviders');
 
     table.string('registerCode', 128);
     table.integer('registerCodeAttempts').notNullable().defaultTo(0);

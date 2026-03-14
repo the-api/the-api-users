@@ -1,6 +1,24 @@
 import { Routings } from 'the-api-routings';
 import type { AppContext } from 'the-api-routings';
 import {
+  clearOAuthCodeVerifier,
+  getOAuthCodeVerifier,
+  getOAuthAuthorizationUrl,
+  OAUTH_SERVICES,
+  getOAuthServiceSummaries,
+  getOAuthServices,
+  normalizeOAuthProviders,
+  rememberOAuthCodeVerifier,
+  rememberOAuthState,
+  resolveOAuthIdentity,
+  validateOAuthState,
+  findUserByOAuthService,
+  withOAuthProvider,
+  withoutOAuthProvider,
+  type OAuthIdentity,
+  type OAuthServiceName,
+} from '../lib/oauth';
+import {
   getExpiresAt,
   hashPassword,
   isExpired,
@@ -15,7 +33,9 @@ import {
 import {
   getDb,
   getDbWrite,
+  getRequestUser,
   getUserRoles,
+  isUserIdentityVerified,
   requireAuth,
   sendEmail,
   sendSms,
@@ -124,6 +144,51 @@ const LOGIN_ERRORS = {
     status: 502,
     description: 'SMS provider failed to deliver the message',
   },
+  OAUTH_SERVICE_NOT_SUPPORTED: {
+    code: 118,
+    status: 404,
+    description: 'OAuth service is not supported',
+  },
+  OAUTH_CONFIG_NOT_FOUND: {
+    code: 119,
+    status: 404,
+    description: 'OAuth configuration not found',
+  },
+  OAUTH_TOKEN_REQUIRED: {
+    code: 120,
+    status: 400,
+    description: 'OAuth code or token is required',
+  },
+  OAUTH_INVALID_TOKEN: {
+    code: 121,
+    status: 401,
+    description: 'OAuth token is invalid or expired',
+  },
+  OAUTH_INVALID_STATE: {
+    code: 122,
+    status: 401,
+    description: 'OAuth state is invalid',
+  },
+  OAUTH_CONFLICT: {
+    code: 123,
+    status: 409,
+    description: 'OAuth identity belongs to another user',
+  },
+  OAUTH_IDENTITY_REQUIRED: {
+    code: 124,
+    status: 400,
+    description: 'OAuth provider did not return an email or phone',
+  },
+  OAUTH_INVALID_REDIRECT_URI: {
+    code: 125,
+    status: 400,
+    description: 'OAuth redirect URI is invalid',
+  },
+  OAUTH_LAST_LOGIN_METHOD: {
+    code: 126,
+    status: 409,
+    description: 'Cannot unlink the last available login method',
+  },
 } as const;
 
 const AUTH_EMAIL_TEMPLATES = {
@@ -141,7 +206,7 @@ const AUTH_EMAIL_TEMPLATES = {
   },
 };
 
-const getRoleAfterEmailConfirmation = (role: string | null | undefined): string =>
+const getRoleAfterVerifiedIdentity = (role: string | null | undefined): string =>
   role === UNVERIFIED_ROLE || !role ? VERIFIED_ROLE : role;
 
 const trimString = (value: unknown): string | null => {
@@ -155,13 +220,14 @@ const toPublicAuthUser = (user: Partial<UserRecord>) => ({
   email: user.email || null,
   phone: user.phone || null,
   fullName: user.fullName || null,
-  role: user.role || (user.isEmailVerified ? VERIFIED_ROLE : UNVERIFIED_ROLE),
+  role: user.role || (isUserIdentityVerified(user) ? VERIFIED_ROLE : UNVERIFIED_ROLE),
   roles: getUserRoles(user),
   avatar: user.avatar || null,
   locale: user.locale || null,
   timezone: user.timezone || null,
   isEmailVerified: !!user.isEmailVerified,
   isPhoneVerified: !!user.isPhoneVerified,
+  oauthServices: getOAuthServices(user.oauthProviders),
 });
 
 const findUserByEmail = async (c: AppContext, email: string): Promise<UserRecord | undefined> => {
@@ -176,6 +242,11 @@ const findUserByLogin = async (c: AppContext, loginName: string): Promise<UserRe
   return db('users')
     .whereRaw('LOWER(login) = ?', [loginName.toLowerCase()])
     .first() as Promise<UserRecord | undefined>;
+};
+
+const findUserByPhone = async (c: AppContext, phone: string): Promise<UserRecord | undefined> => {
+  const db = getDb(c);
+  return db('users').where({ phone }).first() as Promise<UserRecord | undefined>;
 };
 
 const findUserByRefresh = async (c: AppContext, refresh: string): Promise<UserRecord | undefined> => {
@@ -249,7 +320,7 @@ const saveAuthResult = async (
 
   const token = signJwt({
     id: user.id,
-    role: user.role || (user.isEmailVerified ? VERIFIED_ROLE : UNVERIFIED_ROLE),
+    role: user.role || (isUserIdentityVerified(user) ? VERIFIED_ROLE : UNVERIFIED_ROLE),
     roles: getUserRoles(user),
     email: user.email || undefined,
     phone: user.phone || undefined,
@@ -420,6 +491,236 @@ const getConfirmationPayload = async (c: AppContext, target: 'email' | 'phone') 
   return { user, code };
 };
 
+const getOptionalCurrentUserRecord = async (c: AppContext): Promise<UserRecord | undefined> => {
+  const authUser = getRequestUser(c);
+
+  if (!authUser.id || !Array.isArray(authUser.roles) || authUser.roles.includes('guest')) {
+    return undefined;
+  }
+
+  const db = getDb(c);
+  const user = await db('users').where({ id: authUser.id }).first() as UserRecord | undefined;
+  return assertUserActive(user);
+};
+
+const shouldRequireVerifiedIdentity = (user: UserRecord): boolean =>
+  REQUIRE_EMAIL_VERIFICATION && !isUserIdentityVerified(user);
+
+const chooseOAuthTargetUser = ({
+  currentUser,
+  userByService,
+  userByEmail,
+  userByPhone,
+}: {
+  currentUser?: UserRecord;
+  userByService?: UserRecord;
+  userByEmail?: UserRecord;
+  userByPhone?: UserRecord;
+}): UserRecord | undefined => {
+  const candidates = [userByService, userByEmail, userByPhone].filter(Boolean) as UserRecord[];
+
+  if (currentUser) {
+    for (const candidate of candidates) {
+      if (candidate.id !== currentUser.id) throw new Error('OAUTH_CONFLICT');
+    }
+
+    return currentUser;
+  }
+
+  const uniqueCandidates = new Map<number, UserRecord>();
+  for (const candidate of candidates) uniqueCandidates.set(candidate.id, candidate);
+
+  if (uniqueCandidates.size > 1) throw new Error('OAUTH_CONFLICT');
+  return Array.from(uniqueCandidates.values())[0];
+};
+
+const createOAuthUser = async (c: AppContext, identity: OAuthIdentity): Promise<UserRecord> => {
+  const dbWrite = getDbWrite(c);
+  const email = identity.email || null;
+  const phone = identity.phone ? normalizePhone(identity.phone) : null;
+
+  if (!email && !phone) throw new Error('OAUTH_IDENTITY_REQUIRED');
+
+  if (email) await ensureEmailUnique(c, email);
+  if (phone) await ensurePhoneUnique(c, phone);
+
+  const [user] = await dbWrite('users')
+    .insert({
+      email,
+      isEmailVerified: !!email,
+      phone,
+      isPhoneVerified: !!phone,
+      fullName: identity.fullName || null,
+      avatar: identity.avatar || null,
+      locale: identity.locale || null,
+      password: null,
+      salt: null,
+      role: getRoleAfterVerifiedIdentity(null),
+      oauthProviders: withOAuthProvider(null, identity),
+    })
+    .returning('*') as UserRecord[];
+
+  return user;
+};
+
+const syncUserWithOAuthIdentity = async (
+  c: AppContext,
+  user: UserRecord,
+  identity: OAuthIdentity,
+): Promise<UserRecord> => {
+  const dbWrite = getDbWrite(c);
+  const email = identity.email || null;
+  const phone = identity.phone ? normalizePhone(identity.phone) : null;
+  const updates: Partial<UserRecord> = {
+    oauthProviders: withOAuthProvider(user.oauthProviders, identity),
+  };
+
+  if (identity.fullName && !user.fullName) updates.fullName = identity.fullName;
+  if (identity.avatar && !user.avatar) updates.avatar = identity.avatar;
+  if (identity.locale && !user.locale) updates.locale = identity.locale;
+
+  if (email && !user.email) {
+    await ensureEmailUnique(c, email, user.id);
+    updates.email = email;
+    updates.isEmailVerified = true;
+  } else if (email && user.email && user.email === email && !user.isEmailVerified) {
+    updates.isEmailVerified = true;
+  }
+
+  if (phone && !user.phone) {
+    await ensurePhoneUnique(c, phone, user.id);
+    updates.phone = phone;
+    updates.isPhoneVerified = true;
+  } else if (phone && user.phone && user.phone === phone && !user.isPhoneVerified) {
+    updates.isPhoneVerified = true;
+  }
+
+  if (email || phone) {
+    updates.role = getRoleAfterVerifiedIdentity(user.role);
+  }
+
+  if (!Object.keys(updates).length) return user;
+
+  await dbWrite('users')
+    .where({ id: user.id })
+    .update({
+      ...updates,
+      timeUpdated: dbWrite.fn.now(),
+    });
+
+  return {
+    ...user,
+    ...updates,
+  };
+};
+
+const getOAuthBody = async (c: AppContext): Promise<Record<string, unknown>> => {
+  const contentType = c.req.header('content-type') || '';
+
+  if (contentType.includes('application/json')) {
+    return await c.req.json<Record<string, unknown>>();
+  }
+
+  if (
+    contentType.includes('application/x-www-form-urlencoded')
+    || contentType.includes('multipart/form-data')
+  ) {
+    const body = await c.req.parseBody();
+    return body as Record<string, unknown>;
+  }
+
+  return {};
+};
+
+const registerOAuthRoutes = (service: OAuthServiceName): void => {
+  login.get(`/login/${service}`, async (c) => {
+    const { state, url, codeVerifier } = getOAuthAuthorizationUrl(service);
+    rememberOAuthState(c, service, state);
+    if (codeVerifier) rememberOAuthCodeVerifier(c, service, codeVerifier);
+    return c.redirect(url);
+  });
+
+  login.post(`/login/${service}`, async (c) => {
+    const body = await getOAuthBody(c);
+    const state = trimString(body.state);
+
+    if (!validateOAuthState(c, service, state)) {
+      throw new Error('OAUTH_INVALID_STATE');
+    }
+
+    const identity = await resolveOAuthIdentity(service, {
+      code: trimString(body.code),
+      accessToken: trimString(body.accessToken ?? body.access_token ?? body.token),
+      idToken: trimString(body.idToken ?? body.id_token),
+      redirectUri: trimString(body.redirectUri ?? body.redirect_uri),
+      codeVerifier: trimString(body.codeVerifier ?? body.code_verifier) || getOAuthCodeVerifier(c, service),
+      user: body.user,
+    });
+    clearOAuthCodeVerifier(c, service);
+
+    const currentUser = await getOptionalCurrentUserRecord(c);
+    const userByService = await findUserByOAuthService(c, service, identity.externalId);
+    const userByEmail = identity.email ? await findUserByEmail(c, identity.email) : undefined;
+    const providerPhone = identity.phone ? normalizePhone(identity.phone) : null;
+    const userByPhone = providerPhone ? await findUserByPhone(c, providerPhone) : undefined;
+
+    let user = chooseOAuthTargetUser({
+      currentUser,
+      userByService: userByService ? assertUserActive(userByService) : undefined,
+      userByEmail: userByEmail ? assertUserActive(userByEmail) : undefined,
+      userByPhone: userByPhone ? assertUserActive(userByPhone) : undefined,
+    });
+
+    const normalizedIdentity: OAuthIdentity = {
+      ...identity,
+      phone: providerPhone,
+      emailVerified: !!identity.email,
+      phoneVerified: !!providerPhone,
+    };
+
+    if (!user) {
+      user = await createOAuthUser(c, normalizedIdentity);
+    } else {
+      user = await syncUserWithOAuthIdentity(c, user, normalizedIdentity);
+    }
+
+    await saveAuthResult(c, user, !isExpired(user.timeRefreshExpired) ? user.refresh || undefined : undefined);
+  });
+
+  login.delete(`/login/${service}`, async (c) => {
+    const user = await getCurrentUserRecord(c);
+    const providers = normalizeOAuthProviders(user.oauthProviders);
+    const linkedServices = getOAuthServices(providers);
+
+    if (!providers[service]) {
+      c.set('result', {
+        ok: true,
+        oauthServices: linkedServices,
+      });
+      return;
+    }
+
+    if (!(user.password && user.salt) && linkedServices.length <= 1) {
+      throw new Error('OAUTH_LAST_LOGIN_METHOD');
+    }
+
+    const nextProviders = withoutOAuthProvider(providers, service);
+    const dbWrite = getDbWrite(c);
+
+    await dbWrite('users')
+      .where({ id: user.id })
+      .update({
+        oauthProviders: nextProviders,
+        timeUpdated: dbWrite.fn.now(),
+      });
+
+    c.set('result', {
+      ok: true,
+      oauthServices: getOAuthServices(nextProviders),
+    });
+  });
+};
+
 login.errors(LOGIN_ERRORS);
 login.emailTemplates(AUTH_EMAIL_TEMPLATES);
 
@@ -510,7 +811,7 @@ const confirmRegistration = async (c: AppContext) => {
     .where({ id: user.id })
     .update({
       isEmailVerified: true,
-      role: getRoleAfterEmailConfirmation(user.role),
+      role: getRoleAfterVerifiedIdentity(user.role),
       registerCode: null,
       registerCodeAttempts: 0,
       timeRegisterCodeExpired: null,
@@ -519,7 +820,7 @@ const confirmRegistration = async (c: AppContext) => {
 
   const refreshedUser = {
     ...user,
-    role: getRoleAfterEmailConfirmation(user.role),
+    role: getRoleAfterVerifiedIdentity(user.role),
     isEmailVerified: true,
     registerCode: null,
     registerCodeAttempts: 0,
@@ -570,7 +871,7 @@ login.post('/login', async (c) => {
     throw new Error('USER_NOT_FOUND');
   }
 
-  if (REQUIRE_EMAIL_VERIFICATION && !user.isEmailVerified) {
+  if (shouldRequireVerifiedIdentity(user)) {
     throw new Error('EMAIL_NOT_CONFIRMED');
   }
 
@@ -589,7 +890,7 @@ const refreshHandler = async (c: AppContext) => {
     throw new Error('USER_NOT_FOUND');
   }
 
-  if (REQUIRE_EMAIL_VERIFICATION && !user.isEmailVerified) {
+  if (shouldRequireVerifiedIdentity(user)) {
     throw new Error('EMAIL_NOT_CONFIRMED');
   }
 
@@ -800,13 +1101,13 @@ const confirmEmailChange = async (c: AppContext) => {
       emailChangeCodeAttempts: 0,
       timeEmailChangeCodeExpired: null,
       isEmailVerified: true,
-      role: getRoleAfterEmailConfirmation(user.role),
+      role: getRoleAfterVerifiedIdentity(user.role),
       timeUpdated: dbWrite.fn.now(),
     });
 
   await saveAuthResult(c, {
     ...user,
-    role: getRoleAfterEmailConfirmation(user.role),
+    role: getRoleAfterVerifiedIdentity(user.role),
     email: user.emailToChange,
     emailToChange: null,
     isEmailVerified: true,
@@ -955,6 +1256,11 @@ login.post('/login/phone/resend', async (c) => {
   c.set('result', { ok: true });
 });
 
+login.get('/login/externals', async (c) => {
+  const user = await getCurrentUserRecord(c);
+  c.set('result', getOAuthServiceSummaries(user.oauthProviders));
+});
+
 login.get('/login/me', async (c) => {
   const user = await getCurrentUserRecord(c);
   const result = { ...toPublicAuthUser(user) };
@@ -964,11 +1270,13 @@ login.get('/login/me', async (c) => {
     ...result,
     email: user.email || null,
     phone: user.phone || null,
-    role: user.role || (user.isEmailVerified ? VERIFIED_ROLE : UNVERIFIED_ROLE),
+    role: user.role || (isUserIdentityVerified(user) ? VERIFIED_ROLE : UNVERIFIED_ROLE),
     roles: getUserRoles(user),
     permissionsHint: Object.keys(USER_VISIBLE_FOR),
     ownerPermissionsHint: USER_OWNER_PERMISSIONS,
   });
 });
+
+for (const service of OAUTH_SERVICES) registerOAuthRoutes(service);
 
 export { login };
