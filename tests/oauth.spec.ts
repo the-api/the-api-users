@@ -506,6 +506,38 @@ describe('OAuth', () => {
     expect(linkedRecord.oauthProviders.twitter.externalId).toEqual('twitter-user-1');
   });
 
+  test('GET and POST /login/google return 404 when provider config is missing', async () => {
+    const originalClientSecret = process.env.AUTH_GOOGLE_CLIENT_SECRET;
+
+    delete process.env.AUTH_GOOGLE_CLIENT_SECRET;
+
+    try {
+      const getResponse = await theAPI.app.fetch(new Request('http://localhost:7788/login/google'));
+      const getBody = await getResponse.json();
+
+      expect(getResponse.status).toEqual(404);
+      expect(getBody.result.code).toEqual(118);
+      expect(getBody.result.name).toEqual('OAUTH_SERVICE_NOT_SUPPORTED');
+
+      const postResponse = await theAPI.app.fetch(new Request('http://localhost:7788/login/google', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          accessToken: 'google-register-token',
+        }),
+      }));
+      const postBody = await postResponse.json();
+
+      expect(postResponse.status).toEqual(404);
+      expect(postBody.result.code).toEqual(118);
+      expect(postBody.result.name).toEqual('OAUTH_SERVICE_NOT_SUPPORTED');
+    } finally {
+      process.env.AUTH_GOOGLE_CLIENT_SECRET = originalClientSecret;
+    }
+  });
+
   test('finalize', async () => {
     await client.deleteTables();
   });

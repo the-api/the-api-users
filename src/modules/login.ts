@@ -15,6 +15,7 @@ import {
   findUserByOAuthService,
   withOAuthProvider,
   withoutOAuthProvider,
+  isOAuthServiceConfigured,
   type OAuthIdentity,
   type OAuthServiceName,
 } from '../lib/oauth';
@@ -634,6 +635,10 @@ const getOAuthBody = async (c: AppContext): Promise<Record<string, unknown>> => 
 
 const registerOAuthRoutes = (service: OAuthServiceName): void => {
   login.get(`/login/${service}`, async (c) => {
+    if (!isOAuthServiceConfigured(service)) {
+      throw new Error('OAUTH_SERVICE_NOT_SUPPORTED');
+    }
+
     const { state, url, codeVerifier } = getOAuthAuthorizationUrl(service);
     rememberOAuthState(c, service, state);
     if (codeVerifier) rememberOAuthCodeVerifier(c, service, codeVerifier);
@@ -641,6 +646,10 @@ const registerOAuthRoutes = (service: OAuthServiceName): void => {
   });
 
   login.post(`/login/${service}`, async (c) => {
+    if (!isOAuthServiceConfigured(service)) {
+      throw new Error('OAUTH_SERVICE_NOT_SUPPORTED');
+    }
+
     const body = await getOAuthBody(c);
     const state = trimString(body.state);
 

@@ -1091,6 +1091,21 @@ export const getOAuthAuthorizationUrl = (
 
 export const assertOAuthServiceName = (serviceName: string): OAuthServiceName => ensureService(serviceName);
 
+export const isOAuthServiceConfigured = (serviceName: string): boolean => {
+  const service = ensureService(serviceName);
+
+  try {
+    getServiceConfig(service);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && error.message === 'OAUTH_CONFIG_NOT_FOUND') {
+      return false;
+    }
+
+    throw error;
+  }
+};
+
 export const rememberOAuthState = (c: AppContext, service: OAuthServiceName, state: string): void => {
   setOAuthStateCookie(c, service, state);
 };

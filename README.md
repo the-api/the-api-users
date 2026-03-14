@@ -168,6 +168,7 @@ Notes:
 - Apple can use either a pre-generated `AUTH_APPLE_CLIENT_SECRET` or dynamic secret generation via `AUTH_APPLE_TEAM_ID` + `AUTH_APPLE_KEY_ID` + `AUTH_APPLE_PRIVATE_KEY`.
 - Apple browser callbacks use `response_mode=form_post`, so your frontend callback should accept form posts or forward the received fields to `POST /login/apple`.
 - Microsoft Entra ID login uses the v2 endpoint and defaults to tenant `common` unless `AUTH_MICROSOFT_TENANT_ID` is set.
+- If a provider is not fully configured with required `AUTH_*` variables, `GET /login/{service}` and `POST /login/{service}` respond with `404` the same way as an unavailable provider.
 - Twitter/X usually does not return e-mail in the standard OAuth profile. First-time sign-in will work only if the provider returns a usable e-mail/phone or if the request is linking to an already authenticated user.
 - Use HTTPS in production and register the exact redirect URIs in the provider console.
 
