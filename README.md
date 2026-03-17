@@ -35,7 +35,7 @@ npm i the-api-users
 ```ts
 import { TheAPI, middlewares } from 'the-api';
 import { roles } from 'the-api-roles';
-import { login, users } from 'the-api-users';
+import { login, users, migrationDir } from 'the-api-users';
 
 roles.init({
   root: ['*'],
@@ -70,6 +70,7 @@ roles.init({
 
 const theAPI = new TheAPI({
   roles,
+  migrationDirs: [migrationDir],
   routings: [
     middlewares.email,
     middlewares.files,

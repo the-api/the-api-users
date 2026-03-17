@@ -255,7 +255,7 @@ const oauthFetch: typeof fetch = async (input, init) => {
 };
 
 const { theAPI, client } = await testClient({
-  routingOptions: { migrationDirs: ['./src/migrations'] },
+  routingOptions: { migrationDirs: ['./migrations'] },
   routings: [login],
 });
 

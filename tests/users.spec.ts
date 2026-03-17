@@ -1,7 +1,7 @@
 import { expect, test, describe } from 'bun:test';
 import { middlewares, testClient } from 'the-api';
 
-import { users } from '../src';
+import { users, migrationDir } from '../src';
 
 const roles = {
   root: ['*'],
@@ -35,6 +35,7 @@ const roles = {
 };
 
 const { theAPI, client, tokens, users: testUsers } = await testClient({
+  migrationDirs: [migrationDir],
   routings: [middlewares.files, users],
   roles,
 });

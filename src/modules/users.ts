@@ -1,5 +1,3 @@
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Routings } from 'the-api-routings';
 import type { AppContext, CrudBuilderOptionsType } from 'the-api-routings';
 import {
@@ -29,8 +27,7 @@ import {
   USER_VISIBLE_FOR,
 } from '../lib/user-config';
 
-const moduleDir = dirname(fileURLToPath(import.meta.url));
-const users = new Routings({ migrationDirs: [resolve(moduleDir, '../migrations')] });
+const users = new Routings();
 
 const VERIFIED_ROLE = process.env.AUTH_VERIFIED_ROLE || process.env.AUTH_DEFAULT_ROLE || 'registered';
 const UNVERIFIED_ROLE = process.env.AUTH_UNVERIFIED_ROLE || 'unverified';
