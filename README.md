@@ -34,10 +34,10 @@ npm i the-api-users
 
 ```ts
 import { TheAPI, middlewares } from 'the-api';
-import { roles } from 'the-api-roles';
+import Roles from 'the-api-roles';
 import { login, users, migrationDir } from 'the-api-users';
 
-roles.init({
+const roles = new Roles({
   root: ['*'],
   admin: [
     'users.get',
