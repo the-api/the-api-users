@@ -1,0 +1,86 @@
+import type { Knex } from 'knex';
+import type { AppContext } from 'the-api-routings';
+export type AuthUser = {
+    id?: number | string;
+    role?: string | null;
+    roles?: string[];
+    [key: string]: unknown;
+};
+export type UserRecord = {
+    id: number;
+    timeCreated?: Date | string | null;
+    timeUpdated?: Date | string | null;
+    timeDeleted?: Date | string | null;
+    isBlocked?: boolean;
+    isDeleted?: boolean;
+    login?: string | null;
+    password?: string | null;
+    salt?: string | null;
+    timePasswordChanged?: Date | string | null;
+    email?: string | null;
+    isEmailVerified?: boolean;
+    isEmailInvalid?: boolean;
+    phone?: string | null;
+    isPhoneVerified?: boolean;
+    isPhoneInvalid?: boolean;
+    fullName?: string | null;
+    avatar?: string | null;
+    role?: string | null;
+    locale?: string | null;
+    timezone?: string | null;
+    refresh?: string | null;
+    timeRefreshExpired?: Date | string | null;
+    registerCode?: string | null;
+    registerCodeAttempts?: number;
+    timeRegisterCodeExpired?: Date | string | null;
+    recoverCode?: string | null;
+    recoverCodeAttempts?: number;
+    timeRecoverCodeExpired?: Date | string | null;
+    phoneCode?: string | null;
+    phoneCodeAttempts?: number;
+    timePhoneCodeExpired?: Date | string | null;
+    phoneToChange?: string | null;
+    phoneChangeCode?: string | null;
+    phoneChangeCodeAttempts?: number;
+    timePhoneChangeCodeExpired?: Date | string | null;
+    emailToChange?: string | null;
+    emailChangeCode?: string | null;
+    emailChangeCodeAttempts?: number;
+    timeEmailChangeCodeExpired?: Date | string | null;
+    oauthProviders?: Record<string, unknown> | null;
+    [key: string]: unknown;
+};
+export type VisibilityMap = Record<string, string[]>;
+export declare const getDb: (c: AppContext) => Knex;
+export declare const getDbWrite: (c: AppContext) => Knex;
+export declare const getRequestUser: (c: AppContext) => AuthUser;
+export declare const requireAuth: (c: AppContext) => AuthUser;
+export declare const isUserIdentityVerified: (user: Partial<UserRecord> | AuthUser | null | undefined) => boolean;
+export declare const getUserRoles: (user: Partial<UserRecord> | AuthUser | null | undefined) => string[];
+export declare const hasPermission: (c: AppContext, permission: string, roles?: string[]) => boolean;
+export declare const sanitizeUser: ({ c, user, hiddenFields, visibleFor, ownerPermissions, }: {
+    c: AppContext;
+    user: UserRecord;
+    hiddenFields: string[];
+    visibleFor?: VisibilityMap;
+    ownerPermissions?: string[];
+}) => Record<string, unknown>;
+export declare const sendEmail: (c: AppContext, params: {
+    to: string;
+    template?: string;
+    subject?: string;
+    text?: string;
+    html?: string;
+    data?: Record<string, unknown>;
+}) => Promise<void>;
+export declare const sendSms: (c: AppContext, { to, body, }: {
+    to: string;
+    body: string;
+}) => Promise<void>;
+export declare const uploadFile: (c: AppContext, file: File, destDir: string) => Promise<{
+    path: string;
+    name: string;
+    size: number;
+}>;
+export declare const deleteStoredFile: (c: AppContext, filePath: string | null | undefined) => Promise<void>;
+//# sourceMappingURL=runtime.d.ts.map
