@@ -2872,8 +2872,10 @@ users.crud(usersCrudConfig);
 // src/index.ts
 var moduleDir = dirname2(fileURLToPath(import.meta.url));
 var migrationDir = resolve(moduleDir, "../migrations");
+var migrationUpdateDir = resolve(moduleDir, "../migrationsUpdate");
 export {
   users,
+  migrationUpdateDir,
   migrationDir,
   login
 };
