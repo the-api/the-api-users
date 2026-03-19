@@ -34,8 +34,8 @@ const roles = {
   ],
 };
 
-const { theAPI, client, tokens, users: testUsers } = await testClient({
-  migrationDirs: [migrationDir],
+const { theAPI, client, tokens, users: testUsers, db } = await testClient({
+  routingOptions: { migrationDirs: [migrationDir] },
   routings: [middlewares.files, users],
   roles,
 });
@@ -59,7 +59,7 @@ describe('Users', () => {
   });
 
   test('prepare owner user for owner-permission checks', async () => {
-    await client.db('users').insert({
+    await db('users').insert({
       id: ownerUserId,
       email: 'owner-user@test.local',
       password: 'owner-hash',
@@ -71,7 +71,7 @@ describe('Users', () => {
       role: 'registered',
     });
 
-    const owner = await client.db('users').where({ id: ownerUserId }).first();
+    const owner = await db('users').where({ id: ownerUserId }).first();
     expect(owner.email).toEqual('owner-user@test.local');
   });
 
@@ -140,7 +140,7 @@ describe('Users', () => {
   });
 
   test('PATCH /users/:id by admin refreshes verification data for changed email', async () => {
-    const result = await client.db('users').where({ id: userId }).first();
+    const result = await db('users').where({ id: userId }).first();
 
     expect(result.isEmailVerified).toEqual(false);
     expect(result.role).toEqual('unverified');
@@ -148,7 +148,7 @@ describe('Users', () => {
   });
 
   test('PATCH /users/:id email reset keeps non-unverified role', async () => {
-    await client.db('users')
+    await db('users')
       .where({ id: userId })
       .update({
         role: 'admin',
@@ -161,7 +161,7 @@ describe('Users', () => {
       tokens.admin,
     );
 
-    const result = await client.db('users').where({ id: userId }).first();
+    const result = await db('users').where({ id: userId }).first();
 
     expect(result.isEmailVerified).toEqual(false);
     expect(result.role).toEqual('admin');

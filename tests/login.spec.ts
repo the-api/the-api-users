@@ -1,10 +1,9 @@
 import { expect, test, describe } from 'bun:test';
 import { testClient } from 'the-api';
+import { login, migrationDir } from '../src';
 
-import { login } from '../src';
-
-const { theAPI, client } = await testClient({
-  routingOptions: { migrationDirs: ['./migrations'] },
+const { theAPI, client, db } = await testClient({
+  routingOptions: { migrationDirs: [migrationDir] },
   routings: [login],
 });
 
@@ -27,7 +26,7 @@ describe('Login', () => {
   });
 
   test('users table has auth/recovery columns', async () => {
-    const columns = await client.db('users').columnInfo();
+    const columns = await db('users').columnInfo();
 
     expect(!!columns.refresh).toEqual(true);
     expect(!!columns.timeRefreshExpired).toEqual(true);
@@ -67,7 +66,7 @@ describe('Login', () => {
   });
 
   test('POST /login/register/confirm', async () => {
-    const user = await client.db('users')
+    const user = await db('users')
       .where({ email: authUser.email })
       .first();
 
@@ -123,7 +122,7 @@ describe('Login', () => {
   });
 
   test('POST /login/restore with correct code', async () => {
-    const user = await client.db('users')
+    const user = await db('users')
       .where({ email: authUser.email })
       .first();
 
@@ -156,7 +155,7 @@ describe('Login', () => {
   });
 
   test('changing email does not downgrade registered role', async () => {
-    const user = await client.db('users')
+    const user = await db('users')
       .where({ email: authUser.email })
       .first();
 
@@ -171,7 +170,7 @@ describe('Login', () => {
   });
 
   test('POST /login/email with correct code', async () => {
-    const user = await client.db('users')
+    const user = await db('users')
       .where({ email: authUser.email })
       .first();
 
@@ -185,7 +184,7 @@ describe('Login', () => {
   });
 
   test('confirming email upgrades only unverified role', async () => {
-    await client.db('users')
+    await db('users')
       .where({ email: authUpdatedEmail })
       .update({
         role: 'admin',
@@ -213,7 +212,7 @@ describe('Login', () => {
   });
 
   test('POST /login/phone with correct code', async () => {
-    const user = await client.db('users')
+    const user = await db('users')
       .where({ email: authUpdatedEmailSecond })
       .first();
 
