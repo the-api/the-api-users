@@ -1785,9 +1785,10 @@ var getCurrentUserRecord = async (c) => {
   const user = await db("users").where({ id: authUser.id }).first();
   return assertUserActive(user);
 };
+var getBodyObject = (c) => c.var.body && typeof c.var.body === "object" && !Array.isArray(c.var.body) ? c.var.body : {};
 var getConfirmationPayload = async (c, target) => {
   const user = await getCurrentUserRecord(c);
-  const code = trimString((await c.req.json()).code);
+  const code = trimString(getBodyObject(c).code);
   if (!code)
     throw new Error("INVALID_OR_EXPIRED_CODE");
   return { user, code };
@@ -1889,17 +1890,7 @@ var syncUserWithOAuthIdentity = async (c, user, identity) => {
     ...updates
   };
 };
-var getOAuthBody = async (c) => {
-  const contentType = c.req.header("content-type") || "";
-  if (contentType.includes("application/json")) {
-    return await c.req.json();
-  }
-  if (contentType.includes("application/x-www-form-urlencoded") || contentType.includes("multipart/form-data")) {
-    const body = await c.req.parseBody();
-    return body;
-  }
-  return {};
-};
+var getOAuthBody = (c) => getBodyObject(c);
 var registerOAuthRoutes = (service) => {
   login.get(`/login/${service}`, async (c) => {
     if (!isOAuthServiceConfigured(service)) {
@@ -1915,7 +1906,7 @@ var registerOAuthRoutes = (service) => {
     if (!isOAuthServiceConfigured(service)) {
       throw new Error("OAUTH_SERVICE_NOT_SUPPORTED");
     }
-    const body = await getOAuthBody(c);
+    const body = getOAuthBody(c);
     const state = trimString(body.state);
     if (!validateOAuthState(c, service, state)) {
       throw new Error("OAUTH_INVALID_STATE");
@@ -1982,7 +1973,7 @@ var registerOAuthRoutes = (service) => {
 login.errors(LOGIN_ERRORS);
 login.emailTemplates(AUTH_EMAIL_TEMPLATES);
 login.post("/login/register", async (c) => {
-  const body = await c.req.json();
+  const body = getBodyObject(c);
   const email = normalizeEmail(body.email);
   const password = trimString(body.password);
   const phone = body.phone === undefined || body.phone === null ? null : normalizePhone(body.phone);
@@ -2044,7 +2035,7 @@ login.post("/login/register", async (c) => {
   });
 });
 var confirmRegistration = async (c) => {
-  const body = await c.req.json();
+  const body = getBodyObject(c);
   const email = normalizeEmail(body.email);
   const code = trimString(body.code);
   if (!email || !code)
@@ -2078,7 +2069,7 @@ var confirmRegistration = async (c) => {
 login.post("/login/register/confirm", confirmRegistration);
 login.post("/login/register/check", confirmRegistration);
 login.post("/login/register/resend", async (c) => {
-  const body = await c.req.json();
+  const body = getBodyObject(c);
   const email = normalizeEmail(body.email);
   if (!email)
     throw new Error("INVALID_EMAIL");
@@ -2097,7 +2088,7 @@ login.post("/login/register/resend", async (c) => {
   c.set("result", { ok: true });
 });
 login.post("/login", async (c) => {
-  const body = await c.req.json();
+  const body = getBodyObject(c);
   const password = trimString(body.password);
   const email = normalizeEmail(body.email ?? body.login);
   const loginName = body.email ? null : trimString(body.login);
@@ -2115,8 +2106,9 @@ login.post("/login", async (c) => {
   await saveAuthResult(c, user, !isExpired(user.timeRefreshExpired) ? user.refresh || undefined : undefined);
 });
 var refreshHandler = async (c) => {
-  const body = c.req.method === "GET" ? {} : await c.req.json();
-  const refresh = trimString(body.refresh) || trimString(c.req.query("refresh"));
+  const body = c.req.method === "GET" ? {} : getBodyObject(c);
+  const refreshQuery = c.var.query?.refresh;
+  const refresh = trimString(body.refresh) || trimString(Array.isArray(refreshQuery) ? refreshQuery[0] : refreshQuery);
   if (!refresh)
     throw new Error("USER_NOT_FOUND");
   const user = assertUserActive(await findUserByRefresh(c, refresh));
@@ -2131,7 +2123,7 @@ var refreshHandler = async (c) => {
 login.post("/login/refresh", refreshHandler);
 login.get("/login/refresh", refreshHandler);
 login.post("/login/forgot", async (c) => {
-  const body = await c.req.json();
+  const body = getBodyObject(c);
   const email = normalizeEmail(body.email ?? body.login);
   const loginName = body.email ? null : trimString(body.login);
   const user = email ? await findUserByEmail(c, email) : loginName ? await findUserByLogin(c, loginName) : undefined;
@@ -2151,7 +2143,7 @@ login.post("/login/forgot", async (c) => {
   c.set("result", { ok: true });
 });
 login.post("/login/restore", async (c) => {
-  const body = await c.req.json();
+  const body = getBodyObject(c);
   const code = trimString(body.code);
   const password = trimString(body.password);
   if (!code || !password)
@@ -2182,7 +2174,7 @@ login.post("/login/restore", async (c) => {
 });
 login.patch("/login", async (c) => {
   const authUser = requireAuth(c);
-  const body = await c.req.json();
+  const body = getBodyObject(c);
   const user = await getCurrentUserRecord(c);
   const dbWrite = getDbWrite(c);
   const updates = {};
@@ -2531,6 +2523,7 @@ var trimString2 = (value) => {
   const result = value.trim();
   return result || null;
 };
+var getBodyObject2 = (c) => c.var.body && typeof c.var.body === "object" && !Array.isArray(c.var.body) ? c.var.body : {};
 var usersCrudConfig = {
   table: "users",
   userIdFieldName: "id",
@@ -2651,7 +2644,7 @@ users.errors(USERS_ERRORS);
 users.post("/users", async (c) => {
   requireAuth(c);
   assertRoutePermission(c, "users.post");
-  const body = await c.req.json();
+  const body = getBodyObject2(c);
   const requestedFields = Object.keys(body);
   const editableFields = getEditableFields(c, CREATE_BASE_FIELDS);
   const deniedFields = requestedFields.filter((field) => !editableFields.has(field));
@@ -2712,7 +2705,7 @@ users.patch("/users/:id", async (c) => {
   requireAuth(c);
   assertRoutePermission(c, "users.patch");
   const id = parseUserId(c);
-  const body = await c.req.json();
+  const body = getBodyObject2(c);
   const requestedFields = Object.keys(body);
   const editableFields = getEditableFields(c, UPDATE_BASE_FIELDS);
   const deniedFields = requestedFields.filter((field) => !editableFields.has(field));
@@ -2836,7 +2829,7 @@ users.post("/users/:id/avatar", async (c) => {
   if (!canUpload)
     throw new Error("ACCESS_DENIED");
   const user = await getUserById(c, id);
-  const body = await c.req.parseBody();
+  const body = c.var.body && typeof c.var.body === "object" ? c.var.body : {};
   const avatar = body.avatar;
   if (!(avatar instanceof File))
     throw new Error("AVATAR_REQUIRED");

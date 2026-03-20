@@ -1,6 +1,6 @@
 {
   "name": "the-api-users",
-  "version": "0.3.6",
+  "version": "0.4.1",
   "license": "MIT",
   "author": "Dimitry Ivanov <2@ivanoff.org.ua> # curl -A cv ivanoff.org.ua",
   "description": "Users for the-api",
@@ -32,11 +32,12 @@
   },
   "dependencies": {
     "@hono/oauth-providers": "0.8.5",
-    "the-api-routings": "^0.6.6"
+    "the-api-routings": "^0.7.1"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",
-    "the-api": "^22.9.6",
+    "@types/bun": "^1.3.11",
+    "the-api": "^22.10.1",
     "the-api-roles": "^1.1.2"
   }
 }

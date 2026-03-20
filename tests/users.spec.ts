@@ -35,7 +35,7 @@ const roles = {
 };
 
 const { theAPI, client, tokens, users: testUsers, db } = await testClient({
-  routingOptions: { migrationDirs: [migrationDir] },
+  migrationDirs: [migrationDir],
   routings: [middlewares.files, users],
   roles,
 });
@@ -52,11 +52,6 @@ describe('Users', () => {
 
   let userId = 1;
   let ownerUserId = testUsers.registered.id;
-
-  test('init', async () => {
-    await client.deleteTables();
-    await theAPI.init();
-  });
 
   test('prepare owner user for owner-permission checks', async () => {
     await db('users').insert({
@@ -191,9 +186,5 @@ describe('Users', () => {
     const { result } = await client.get(`/users/${userId}`, tokens.admin);
 
     expect(result.name).toEqual('NOT_FOUND');
-  });
-
-  test('finalize', async () => {
-    await client.deleteTables();
   });
 });

@@ -3,7 +3,7 @@ import { testClient } from 'the-api';
 import { login, migrationDir } from '../src';
 
 const { theAPI, client, db } = await testClient({
-  routingOptions: { migrationDirs: [migrationDir] },
+  migrationDirs: [migrationDir],
   routings: [login],
 });
 
@@ -19,11 +19,6 @@ describe('Login', () => {
 
   let authToken = '';
   let authRefresh = '';
-
-  test('init', async () => {
-    await client.deleteTables();
-    await theAPI.init();
-  });
 
   test('users table has auth/recovery columns', async () => {
     const columns = await db('users').columnInfo();
@@ -230,9 +225,5 @@ describe('Login', () => {
 
     expect(result.email).toEqual(authUpdatedEmailSecond);
     expect(result.phone).toEqual(authPhone);
-  });
-
-  test('finalize', async () => {
-    await client.deleteTables();
   });
 });

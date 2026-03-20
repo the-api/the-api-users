@@ -255,7 +255,7 @@ const oauthFetch: typeof fetch = async (input, init) => {
 };
 
 const { theAPI, client } = await testClient({
-  routingOptions: { migrationDirs: ['./migrations'] },
+  migrationDirs: ['./migrations'],
   routings: [login],
 });
 
@@ -270,11 +270,6 @@ afterAll(() => {
 describe('OAuth', () => {
   let linkedUserToken = '';
   let linkedUserId = 0;
-
-  test('init', async () => {
-    await client.deleteTables();
-    await theAPI.init();
-  });
 
   test('GET /login/google redirects to Google OAuth server', async () => {
     const response = await theAPI.app.fetch(new Request('http://localhost:7788/login/google'));
@@ -536,9 +531,5 @@ describe('OAuth', () => {
     } finally {
       process.env.AUTH_GOOGLE_CLIENT_SECRET = originalClientSecret;
     }
-  });
-
-  test('finalize', async () => {
-    await client.deleteTables();
   });
 });

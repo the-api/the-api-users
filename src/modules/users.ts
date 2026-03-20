@@ -119,6 +119,12 @@ const trimString = (value: unknown): string | null => {
   return result || null;
 };
 
+const getBodyObject = (c: AppContext): Record<string, unknown> => (
+  c.var.body && typeof c.var.body === 'object' && !Array.isArray(c.var.body)
+    ? (c.var.body as Record<string, unknown>)
+    : {}
+);
+
 const usersCrudConfig: CrudBuilderOptionsType = {
   table: 'users',
   userIdFieldName: 'id',
@@ -248,7 +254,7 @@ users.post('/users', async (c) => {
   requireAuth(c);
   assertRoutePermission(c, 'users.post');
 
-  const body = await c.req.json<Record<string, unknown>>();
+  const body = getBodyObject(c);
   const requestedFields = Object.keys(body);
   const editableFields = getEditableFields(c, CREATE_BASE_FIELDS);
   const deniedFields = requestedFields.filter((field) => !editableFields.has(field));
@@ -312,7 +318,7 @@ users.patch('/users/:id', async (c) => {
   assertRoutePermission(c, 'users.patch');
 
   const id = parseUserId(c);
-  const body = await c.req.json<Record<string, unknown>>();
+  const body = getBodyObject(c);
   const requestedFields = Object.keys(body);
   const editableFields = getEditableFields(c, UPDATE_BASE_FIELDS);
   const deniedFields = requestedFields.filter((field) => !editableFields.has(field));
@@ -442,7 +448,9 @@ users.post('/users/:id/avatar', async (c) => {
   if (!canUpload) throw new Error('ACCESS_DENIED');
 
   const user = await getUserById(c, id);
-  const body = await c.req.parseBody();
+  const body = (c.var.body && typeof c.var.body === 'object')
+    ? (c.var.body as Record<string, unknown>)
+    : {};
   const avatar = body.avatar as File | undefined;
   if (!(avatar instanceof File)) throw new Error('AVATAR_REQUIRED');
 

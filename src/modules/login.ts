@@ -484,9 +484,15 @@ const getCurrentUserRecord = async (c: AppContext): Promise<UserRecord> => {
   return assertUserActive(user);
 };
 
+const getBodyObject = (c: AppContext): Record<string, unknown> => (
+  c.var.body && typeof c.var.body === 'object' && !Array.isArray(c.var.body)
+    ? (c.var.body as Record<string, unknown>)
+    : {}
+);
+
 const getConfirmationPayload = async (c: AppContext, target: 'email' | 'phone') => {
   const user = await getCurrentUserRecord(c);
-  const code = trimString((await c.req.json<Record<string, unknown>>()).code);
+  const code = trimString(getBodyObject(c).code);
   if (!code) throw new Error('INVALID_OR_EXPIRED_CODE');
 
   return { user, code };
@@ -615,23 +621,7 @@ const syncUserWithOAuthIdentity = async (
   };
 };
 
-const getOAuthBody = async (c: AppContext): Promise<Record<string, unknown>> => {
-  const contentType = c.req.header('content-type') || '';
-
-  if (contentType.includes('application/json')) {
-    return await c.req.json<Record<string, unknown>>();
-  }
-
-  if (
-    contentType.includes('application/x-www-form-urlencoded')
-    || contentType.includes('multipart/form-data')
-  ) {
-    const body = await c.req.parseBody();
-    return body as Record<string, unknown>;
-  }
-
-  return {};
-};
+const getOAuthBody = (c: AppContext): Record<string, unknown> => getBodyObject(c);
 
 const registerOAuthRoutes = (service: OAuthServiceName): void => {
   login.get(`/login/${service}`, async (c) => {
@@ -650,7 +640,7 @@ const registerOAuthRoutes = (service: OAuthServiceName): void => {
       throw new Error('OAUTH_SERVICE_NOT_SUPPORTED');
     }
 
-    const body = await getOAuthBody(c);
+    const body = getOAuthBody(c);
     const state = trimString(body.state);
 
     if (!validateOAuthState(c, service, state)) {
@@ -734,7 +724,7 @@ login.errors(LOGIN_ERRORS);
 login.emailTemplates(AUTH_EMAIL_TEMPLATES);
 
 login.post('/login/register', async (c) => {
-  const body = await c.req.json<Record<string, unknown>>();
+  const body = getBodyObject(c);
   const email = normalizeEmail(body.email);
   const password = trimString(body.password);
   const phone = body.phone === undefined || body.phone === null ? null : normalizePhone(body.phone);
@@ -801,7 +791,7 @@ login.post('/login/register', async (c) => {
 });
 
 const confirmRegistration = async (c: AppContext) => {
-  const body = await c.req.json<Record<string, unknown>>();
+  const body = getBodyObject(c);
   const email = normalizeEmail(body.email);
   const code = trimString(body.code);
 
@@ -843,7 +833,7 @@ login.post('/login/register/confirm', confirmRegistration);
 login.post('/login/register/check', confirmRegistration);
 
 login.post('/login/register/resend', async (c) => {
-  const body = await c.req.json<Record<string, unknown>>();
+  const body = getBodyObject(c);
   const email = normalizeEmail(body.email);
   if (!email) throw new Error('INVALID_EMAIL');
 
@@ -864,7 +854,7 @@ login.post('/login/register/resend', async (c) => {
 });
 
 login.post('/login', async (c) => {
-  const body = await c.req.json<Record<string, unknown>>();
+  const body = getBodyObject(c);
   const password = trimString(body.password);
   const email = normalizeEmail(body.email ?? body.login);
   const loginName = body.email ? null : trimString(body.login);
@@ -890,8 +880,10 @@ login.post('/login', async (c) => {
 const refreshHandler = async (c: AppContext) => {
   const body = c.req.method === 'GET'
     ? {}
-    : await c.req.json<Record<string, unknown>>();
-  const refresh = trimString(body.refresh) || trimString(c.req.query('refresh'));
+    : getBodyObject(c);
+  const refreshQuery = c.var.query?.refresh;
+  const refresh = trimString(body.refresh)
+    || trimString(Array.isArray(refreshQuery) ? refreshQuery[0] : refreshQuery);
   if (!refresh) throw new Error('USER_NOT_FOUND');
 
   const user = assertUserActive(await findUserByRefresh(c, refresh));
@@ -910,7 +902,7 @@ login.post('/login/refresh', refreshHandler);
 login.get('/login/refresh', refreshHandler);
 
 login.post('/login/forgot', async (c) => {
-  const body = await c.req.json<Record<string, unknown>>();
+  const body = getBodyObject(c);
   const email = normalizeEmail(body.email ?? body.login);
   const loginName = body.email ? null : trimString(body.login);
 
@@ -939,7 +931,7 @@ login.post('/login/forgot', async (c) => {
 });
 
 login.post('/login/restore', async (c) => {
-  const body = await c.req.json<Record<string, unknown>>();
+  const body = getBodyObject(c);
   const code = trimString(body.code);
   const password = trimString(body.password);
 
@@ -977,7 +969,7 @@ login.post('/login/restore', async (c) => {
 
 login.patch('/login', async (c) => {
   const authUser = requireAuth(c);
-  const body = await c.req.json<Record<string, unknown>>();
+  const body = getBodyObject(c);
   const user = await getCurrentUserRecord(c);
   const dbWrite = getDbWrite(c);
 
