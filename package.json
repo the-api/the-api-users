@@ -1,6 +1,6 @@
 {
   "name": "the-api-users",
-  "version": "0.4.1",
+  "version": "0.5.1",
   "license": "MIT",
   "author": "Dimitry Ivanov <2@ivanoff.org.ua> # curl -A cv ivanoff.org.ua",
   "description": "Users for the-api",
@@ -28,7 +28,7 @@
   "scripts": {
     "build": "bun build ./src/index.ts --outdir ./dist --target=node --external @hono/oauth-providers --external the-api-routings && tsc",
     "prepack": "bun run build",
-    "test": "bun test tests/login.spec.ts tests/oauth.spec.ts tests/users.spec.ts"
+    "test": "bun test tests/auth.spec.ts tests/login.spec.ts tests/oauth.spec.ts tests/users.spec.ts"
   },
   "dependencies": {
     "@hono/oauth-providers": "0.8.5",
