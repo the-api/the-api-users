@@ -7,7 +7,7 @@ import { Routings } from "the-api-routings";
 
 // src/lib/oauth.ts
 import {
-  createHash,
+  createHash as createHash2,
   createPrivateKey,
   createPublicKey,
   sign as cryptoSign,
@@ -170,8 +170,21 @@ var setCookie = (c, name, value, opt) => {
 };
 
 // src/lib/auth.ts
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  scryptSync,
+  timingSafeEqual
+} from "node:crypto";
 var ONE_SECOND = 1000;
+var DEFAULT_PASSWORD_HASH_ALGORITHM = "scrypt";
+var DEFAULT_SCRYPT_OPTIONS = {
+  N: 16384,
+  r: 8,
+  p: 1,
+  maxmem: 32 * 1024 * 1024
+};
 var DURATION_UNITS = {
   s: 1,
   m: 60,
@@ -211,10 +224,35 @@ var randomCode = (length = 6) => {
   return numbers.join("");
 };
 var randomSalt = () => randomToken(16);
-var hashPassword = (password, salt) => scryptSync(password, salt, 64).toString("hex");
-var verifyPassword = (password, salt, hash) => {
+var getPasswordHashAlgorithm = () => {
+  const value = process.env.AUTH_PASSWORD_HASH_ALGORITHM?.trim().toLowerCase();
+  if (value === "sha256")
+    return "sha256";
+  return DEFAULT_PASSWORD_HASH_ALGORITHM;
+};
+var isPowerOfTwo = (value) => value > 1 && Number.isInteger(Math.log2(value));
+var getIntegerEnv = (key, fallback, isValid = (value) => value > 0) => {
+  const raw = process.env[key]?.trim();
+  if (!raw)
+    return fallback;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && isValid(value) ? value : fallback;
+};
+var getScryptOptions = () => ({
+  N: getIntegerEnv("AUTH_SCRYPT_N", DEFAULT_SCRYPT_OPTIONS.N, isPowerOfTwo),
+  r: getIntegerEnv("AUTH_SCRYPT_R", DEFAULT_SCRYPT_OPTIONS.r),
+  p: getIntegerEnv("AUTH_SCRYPT_P", DEFAULT_SCRYPT_OPTIONS.p),
+  maxmem: getIntegerEnv("AUTH_SCRYPT_MAXMEM", DEFAULT_SCRYPT_OPTIONS.maxmem)
+});
+var hashPassword = (password, salt, algorithm = getPasswordHashAlgorithm()) => {
+  if (algorithm === "sha256") {
+    return createHash("sha256").update(`${password}${salt}`, "utf8").digest("hex");
+  }
+  return scryptSync(password, salt, 64, getScryptOptions()).toString("hex");
+};
+var verifyPassword = (password, salt, hash, algorithm = getPasswordHashAlgorithm()) => {
   const expected = Buffer.from(hash, "hex");
-  const actual = Buffer.from(hashPassword(password, salt), "hex");
+  const actual = Buffer.from(hashPassword(password, salt, algorithm), "hex");
   if (expected.length !== actual.length)
     return false;
   return timingSafeEqual(expected, actual);
@@ -457,7 +495,7 @@ var setOAuthTempCookie = (c, service, key, value) => {
 var createOAuthState = () => randomToken(18);
 var toBase64Url = (value) => value.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 var createCodeVerifier = () => randomToken(48);
-var createCodeChallenge = (codeVerifier) => toBase64Url(createHash("sha256").update(codeVerifier).digest());
+var createCodeChallenge = (codeVerifier) => toBase64Url(createHash2("sha256").update(codeVerifier).digest());
 var fromBase64Url = (value) => {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
   return Buffer.from(normalized, "base64");

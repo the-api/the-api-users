@@ -1,4 +1,10 @@
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  scryptSync,
+  timingSafeEqual,
+} from 'node:crypto';
 
 export type JwtPayload = {
   id: number | string;
@@ -10,7 +16,22 @@ export type JwtPayload = {
   [key: string]: unknown;
 };
 
+export type PasswordHashAlgorithm = 'scrypt' | 'sha256';
+export type PasswordScryptOptions = {
+  N: number;
+  r: number;
+  p: number;
+  maxmem: number;
+};
+
 const ONE_SECOND = 1000;
+const DEFAULT_PASSWORD_HASH_ALGORITHM: PasswordHashAlgorithm = 'scrypt';
+const DEFAULT_SCRYPT_OPTIONS: PasswordScryptOptions = {
+  N: 16_384,
+  r: 8,
+  p: 1,
+  maxmem: 32 * 1024 * 1024,
+};
 const DURATION_UNITS: Record<string, number> = {
   s: 1,
   m: 60,
@@ -63,12 +84,54 @@ export const randomCode = (length = 6): string => {
 
 export const randomSalt = (): string => randomToken(16);
 
-export const hashPassword = (password: string, salt: string): string =>
-  scryptSync(password, salt, 64).toString('hex');
+export const getPasswordHashAlgorithm = (): PasswordHashAlgorithm => {
+  const value = process.env.AUTH_PASSWORD_HASH_ALGORITHM?.trim().toLowerCase();
+  if (value === 'sha256') return 'sha256';
+  return DEFAULT_PASSWORD_HASH_ALGORITHM;
+};
 
-export const verifyPassword = (password: string, salt: string, hash: string): boolean => {
+const isPowerOfTwo = (value: number): boolean =>
+  value > 1 && Number.isInteger(Math.log2(value));
+
+const getIntegerEnv = (
+  key: string,
+  fallback: number,
+  isValid: (value: number) => boolean = (value) => value > 0,
+): number => {
+  const raw = process.env[key]?.trim();
+  if (!raw) return fallback;
+
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && isValid(value) ? value : fallback;
+};
+
+export const getScryptOptions = (): PasswordScryptOptions => ({
+  N: getIntegerEnv('AUTH_SCRYPT_N', DEFAULT_SCRYPT_OPTIONS.N, isPowerOfTwo),
+  r: getIntegerEnv('AUTH_SCRYPT_R', DEFAULT_SCRYPT_OPTIONS.r),
+  p: getIntegerEnv('AUTH_SCRYPT_P', DEFAULT_SCRYPT_OPTIONS.p),
+  maxmem: getIntegerEnv('AUTH_SCRYPT_MAXMEM', DEFAULT_SCRYPT_OPTIONS.maxmem),
+});
+
+export const hashPassword = (
+  password: string,
+  salt: string,
+  algorithm = getPasswordHashAlgorithm(),
+): string => {
+  if (algorithm === 'sha256') {
+    return createHash('sha256').update(`${password}${salt}`, 'utf8').digest('hex');
+  }
+
+  return scryptSync(password, salt, 64, getScryptOptions()).toString('hex');
+};
+
+export const verifyPassword = (
+  password: string,
+  salt: string,
+  hash: string,
+  algorithm = getPasswordHashAlgorithm(),
+): boolean => {
   const expected = Buffer.from(hash, 'hex');
-  const actual = Buffer.from(hashPassword(password, salt), 'hex');
+  const actual = Buffer.from(hashPassword(password, salt, algorithm), 'hex');
 
   if (expected.length !== actual.length) return false;
   return timingSafeEqual(expected, actual);
@@ -119,4 +182,3 @@ export const signJwt = (
 
   return `${encodedHeader}.${encodedPayload}.${base64UrlEncode(signature)}`;
 };
-

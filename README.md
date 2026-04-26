@@ -98,6 +98,11 @@ Core auth variables:
 - `AUTH_RECOVER_CODE_EXPIRES_IN`
 - `AUTH_REFRESH_EXPIRES_IN`
 - `AUTH_MAX_CODE_ATTEMPTS`
+- `AUTH_PASSWORD_HASH_ALGORITHM` (`scrypt` by default, or `sha256`)
+- `AUTH_SCRYPT_N` (`16384` by default, must be a power of two)
+- `AUTH_SCRYPT_R` (`8` by default)
+- `AUTH_SCRYPT_P` (`1` by default)
+- `AUTH_SCRYPT_MAXMEM` (`33554432` by default)
 
 Google OAuth:
 
@@ -172,6 +177,8 @@ Notes:
 - If a provider is not fully configured with required `AUTH_*` variables, `GET /login/{service}` and `POST /login/{service}` respond with `404` the same way as an unavailable provider.
 - Twitter/X usually does not return e-mail in the standard OAuth profile. First-time sign-in will work only if the provider returns a usable e-mail/phone or if the request is linking to an already authenticated user.
 - Use HTTPS in production and register the exact redirect URIs in the provider console.
+- Set `AUTH_PASSWORD_HASH_ALGORITHM=sha256` only if you want to store `sha256(password + salt)` password hashes. New password inserts and updates will use the selected algorithm too.
+- `AUTH_SCRYPT_*` values are used only when `AUTH_PASSWORD_HASH_ALGORITHM=scrypt`. Changing them changes the generated hash, so existing passwords continue to work only if they were created with the same parameters or rehashed.
 
 ## OAuth Behavior
 
