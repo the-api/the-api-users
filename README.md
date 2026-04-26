@@ -239,26 +239,17 @@ curl -X POST "$API/login/github" \
 
 Useful for native/mobile/SPA flows where the client already has a provider token.
 
-Google supports:
+Supported request payloads:
 
-- `accessToken`
-- `idToken`
-- `code`
+- Google: `accessToken`, `idToken` or `code`
+- Apple: `idToken` or `code`
+- GitHub: `accessToken` or `code`
+- Facebook: `accessToken` or `code`
+- LinkedIn: `accessToken` or `code`
+- Microsoft: `accessToken` or `code`
+- Twitter/X: `accessToken` or `code`
 
-Apple supports:
-
-- `idToken`
-- `code`
-
-GitHub supports:
-
-- `accessToken`
-- `code`
-
-Microsoft supports:
-
-- `accessToken`
-- `code`
+Twitter/X authorization-code exchange uses PKCE, so it needs the `codeVerifier` saved by `GET /login/twitter` or an explicit `codeVerifier` / `code_verifier` in the request body.
 
 Examples:
 
@@ -274,6 +265,33 @@ curl -X POST "$API/login/github" \
   -d '{"accessToken":"github-access-token"}'
 ```
 
+```bash
+curl -X POST "$API/login/facebook" \
+  -H "Content-Type: application/json" \
+  -d '{"accessToken":"facebook-access-token"}'
+```
+
+```bash
+curl -X POST "$API/login/linkedin" \
+  -H "Content-Type: application/json" \
+  -d '{"accessToken":"linkedin-access-token"}'
+```
+
+```bash
+curl -X POST "$API/login/microsoft" \
+  -H "Content-Type: application/json" \
+  -d '{"accessToken":"microsoft-access-token"}'
+```
+
+Apple `form_post` callbacks can be forwarded as URL-encoded form data:
+
+```bash
+curl -X POST "$API/login/apple" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "id_token=apple-id-token" \
+  --data-urlencode 'user={"name":{"firstName":"Apple","lastName":"User"}}'
+```
+
 ### Linking to an existing logged-in user
 
 ```bash
@@ -284,6 +302,15 @@ curl -X POST "$API/login/github" \
 ```
 
 The response format is the same as normal login: the current user plus fresh `token` and `refresh`.
+
+Twitter/X usually does not return e-mail; use it as a linking flow unless your provider response includes a usable e-mail or phone:
+
+```bash
+curl -X POST "$API/login/twitter" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"accessToken":"twitter-access-token"}'
+```
 
 ### Listing and unlinking linked providers
 
@@ -334,6 +361,270 @@ Successful auth responses include:
 }
 ```
 
+## Request Examples
+
+The examples below follow the flows covered by the test suite. Use these placeholders:
+
+```bash
+API="http://localhost:7788"
+TOKEN="jwt-from-login"
+REFRESH="refresh-token-from-login"
+ADMIN_TOKEN="admin-jwt"
+USER_ID="1"
+```
+
+`TOKEN` is `result.token` from an auth response. `REFRESH` is `result.refresh`.
+
+### Flow map
+
+- New password user: `POST /login/register` -> `POST /login/register/confirm` -> `POST /login`.
+- Existing password user: `POST /login` -> `POST /login/refresh` or `GET /login/refresh`.
+- Forgotten password: `POST /login/forgot` -> `POST /login/restore` -> `POST /login`.
+- Own account changes: `PATCH /login`; confirm e-mail through `/login/email`, confirm phone through `/login/phone`.
+- Admin user management: `/users` endpoints with route and field permissions.
+- OAuth user: `GET /login/{service}` -> provider callback -> `POST /login/{service}`, or direct token `POST /login/{service}`.
+
+### Registration with e-mail confirmation
+
+```bash
+curl -X POST "$API/login/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "auth-user-1@test.local",
+    "password": "auth-pass-1",
+    "fullName": "Auth User",
+    "locale": "en",
+    "timezone": "UTC"
+  }'
+```
+
+With `AUTH_REQUIRE_EMAIL_VERIFICATION=true`, the user is created as `unverified` and the response includes:
+
+```json
+{
+  "result": {
+    "ok": true,
+    "email": "auth-user-1@test.local",
+    "role": "unverified",
+    "emailConfirmationRequired": true
+  }
+}
+```
+
+Before confirmation, password login returns `EMAIL_NOT_CONFIRMED`.
+
+```bash
+curl -X POST "$API/login/register/confirm" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "auth-user-1@test.local",
+    "code": "code-from-email"
+  }'
+```
+
+`POST /login/register/check` is an alias for the same confirmation flow. Use this to send a fresh code:
+
+```bash
+curl -X POST "$API/login/register/resend" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"auth-user-1@test.local"}'
+```
+
+If `AUTH_REQUIRE_EMAIL_VERIFICATION` is not `true`, `POST /login/register` returns the normal auth response with `token` and `refresh` immediately.
+
+### Password login and refresh
+
+```bash
+curl -X POST "$API/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "auth-user-1@test.local",
+    "password": "auth-pass-1"
+  }'
+```
+
+You can also log in with `login` instead of `email` when the user has a login name:
+
+```bash
+curl -X POST "$API/login" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "login": "auth-user",
+    "password": "auth-pass-1"
+  }'
+```
+
+Refresh keeps the same refresh token and returns a fresh JWT:
+
+```bash
+curl -X POST "$API/login/refresh" \
+  -H "Content-Type: application/json" \
+  -d '{"refresh":"refresh-token-from-login"}'
+```
+
+```bash
+curl "$API/login/refresh?refresh=refresh-token-from-login"
+```
+
+Current logged-in user:
+
+```bash
+curl -H "Authorization: Bearer $TOKEN" "$API/login/me"
+```
+
+### Password recovery
+
+Request a recovery code. The response is `{ "ok": true }` even when the e-mail is unknown.
+
+```bash
+curl -X POST "$API/login/forgot" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"auth-user-1@test.local"}'
+```
+
+Set a new password with the code from e-mail:
+
+```bash
+curl -X POST "$API/login/restore" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": "recover-code-from-email",
+    "password": "auth-pass-2"
+  }'
+```
+
+After restore, log in with the new password.
+
+### Own profile, password, e-mail and phone
+
+Update self-editable profile fields:
+
+```bash
+curl -X PATCH "$API/login" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fullName": "Updated User",
+    "locale": "uk",
+    "timezone": "Europe/Kyiv"
+  }'
+```
+
+Change password by sending the current password as `password` and the replacement as `newPassword`:
+
+```bash
+curl -X PATCH "$API/login" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "password": "auth-pass-2",
+    "newPassword": "auth-pass-3"
+  }'
+```
+
+Request an e-mail change:
+
+```bash
+curl -X PATCH "$API/login" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"auth-user-1-updated@test.local"}'
+```
+
+The response includes `emailChangeRequested: true`. Confirm it with the code sent to the new e-mail:
+
+```bash
+curl -X POST "$API/login/email" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"code":"email-change-code"}'
+```
+
+`POST /login/email/confirm` is an alias. Use `POST /login/email/resend` with the same bearer token to send a fresh code.
+
+Request and confirm a phone change:
+
+```bash
+curl -X PATCH "$API/login" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"+15550000001"}'
+```
+
+```bash
+curl -X POST "$API/login/phone" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"code":"phone-change-code"}'
+```
+
+`POST /login/phone/confirm` is an alias. Use `POST /login/phone/resend` to send a fresh code.
+
+### Users CRUD and avatar
+
+The `/users` module is permission-based. A token with only `users.get` can list users but private fields such as `email`, `phone`, `password`, `salt` and auth codes are hidden. The owner gets the visibility permissions listed in `USER_OWNER_PERMISSIONS` for their own record. Admin-like roles need route permissions plus field permissions such as `users.viewEmail`, `users.editEmail` and `users.editVerification`.
+
+Create a user as an admin:
+
+```bash
+curl -X POST "$API/users" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user-1@test.local",
+    "password": "pass-1",
+    "fullName": "User One",
+    "locale": "uk",
+    "timezone": "Europe/Kyiv"
+  }'
+```
+
+List users, sorted by id:
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" "$API/users?_sort=id"
+```
+
+Read one user:
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_TOKEN" "$API/users/$USER_ID"
+```
+
+Patch fields allowed by the caller's field permissions:
+
+```bash
+curl -X PATCH "$API/users/$USER_ID" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user-1-updated@test.local",
+    "fullName": "Updated User",
+    "isEmailVerified": false
+  }'
+```
+
+When an admin changes e-mail and sets `isEmailVerified: false`, the module generates a new register code and keeps non-`unverified` roles unchanged.
+
+Upload or replace an avatar. The owner, `users.patch` or `users.uploadAvatar` can do this:
+
+```bash
+curl -X POST "$API/users/$USER_ID/avatar" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "avatar=@tests/static/1.png"
+```
+
+Delete a user as an admin:
+
+```bash
+curl -X DELETE "$API/users/$USER_ID" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+### Error handling
+
+Errors use the same response envelope. Branch on `result.name`; examples covered by the tests include `EMAIL_NOT_CONFIRMED`, `WRONG_CODE`, `INVALID_OR_EXPIRED_CODE`, `ACCESS_DENIED`, `NOT_FOUND` and `OAUTH_SERVICE_NOT_SUPPORTED`.
+
 ## Main Endpoints
 
 Auth:
@@ -356,6 +647,9 @@ Auth:
 - `POST /login/phone/resend`
 - `GET /login/me`
 - `GET /login/externals`
+- `GET /login/apple`
+- `POST /login/apple`
+- `DELETE /login/apple`
 - `GET /login/google`
 - `POST /login/google`
 - `DELETE /login/google`
@@ -368,6 +662,9 @@ Auth:
 - `GET /login/linkedin`
 - `POST /login/linkedin`
 - `DELETE /login/linkedin`
+- `GET /login/microsoft`
+- `POST /login/microsoft`
+- `DELETE /login/microsoft`
 - `GET /login/twitter`
 - `POST /login/twitter`
 - `DELETE /login/twitter`
