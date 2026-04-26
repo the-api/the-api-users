@@ -56,7 +56,7 @@ const RECOVER_CODE_EXPIRES_IN = process.env.AUTH_RECOVER_CODE_EXPIRES_IN || CODE
 const REFRESH_EXPIRES_IN = process.env.AUTH_REFRESH_EXPIRES_IN || '30d';
 const VERIFIED_ROLE = process.env.AUTH_VERIFIED_ROLE || process.env.AUTH_DEFAULT_ROLE || 'registered';
 const UNVERIFIED_ROLE = process.env.AUTH_UNVERIFIED_ROLE || 'unverified';
-const REQUIRE_EMAIL_VERIFICATION = process.env.AUTH_REQUIRE_EMAIL_VERIFICATION !== 'false';
+const REQUIRE_EMAIL_VERIFICATION = process.env.AUTH_REQUIRE_EMAIL_VERIFICATION === 'true';
 const MAX_CODE_ATTEMPTS = Number(process.env.AUTH_MAX_CODE_ATTEMPTS || 5);
 
 const LOGIN_ERRORS = {
