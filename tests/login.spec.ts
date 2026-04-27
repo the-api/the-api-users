@@ -52,6 +52,8 @@ describe('Login', () => {
     expect(result.ok).toEqual(true);
     expect(result.email).toEqual(authUser.email);
     expect(result.role).toEqual('unverified');
+    expect(typeof result.refresh).toEqual('string');
+    expect(result.refresh.length > 10).toEqual(true);
     expect(result.emailConfirmationRequired).toEqual(true);
   });
 
@@ -101,6 +103,22 @@ describe('Login', () => {
     expect(result.refresh).toEqual(authRefresh);
   });
 
+  test('POST /login rotates expired refresh', async () => {
+    const expiredRefresh = authRefresh;
+    await db('users')
+      .where({ email: authUser.email })
+      .update({ timeRefreshExpired: new Date(0) });
+
+    const { result } = await client.post('/login', authUser);
+
+    authToken = result.token;
+    authRefresh = result.refresh;
+
+    expect(typeof result.token).toEqual('string');
+    expect(typeof result.refresh).toEqual('string');
+    expect(result.refresh).not.toEqual(expiredRefresh);
+  });
+
   test('POST /login/forgot', async () => {
     const { result } = await client.post('/login/forgot', { email: authUser.email });
 
@@ -126,7 +144,14 @@ describe('Login', () => {
       password: 'auth-pass-2',
     });
 
+    const restoredUser = await db('users')
+      .where({ email: authUser.email })
+      .first();
+
     expect(result.ok).toEqual(true);
+    expect(typeof restoredUser.refresh).toEqual('string');
+    expect(restoredUser.refresh).not.toEqual(authRefresh);
+    expect(new Date(restoredUser.timeRefreshExpired).getTime() <= Date.now()).toEqual(true);
   });
 
   test('POST /login with restored password', async () => {

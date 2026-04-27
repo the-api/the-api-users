@@ -308,7 +308,9 @@ const saveAuthResult = async (
   refreshOverride?: string,
 ): Promise<void> => {
   const dbWrite = getDbWrite(c);
-  const refresh = refreshOverride || user.refresh || randomToken();
+  const refresh = refreshOverride
+    || (!isExpired(user.timeRefreshExpired) ? user.refresh : undefined)
+    || randomToken();
   const timeRefreshExpired = getExpiresAt(REFRESH_EXPIRES_IN, 30 * 24 * 60 * 60);
 
   await dbWrite('users')
@@ -563,6 +565,8 @@ const createOAuthUser = async (c: AppContext, identity: OAuthIdentity): Promise<
       password: null,
       salt: null,
       role: getRoleAfterVerifiedIdentity(null),
+      refresh: randomToken(),
+      timeRefreshExpired: getExpiresAt(REFRESH_EXPIRES_IN, 30 * 24 * 60 * 60),
       oauthProviders: withOAuthProvider(null, identity),
     })
     .returning('*') as UserRecord[];
@@ -750,6 +754,8 @@ login.post('/login/register', async (c) => {
     : null;
   const phoneCode = phone ? randomCode() : null;
   const timePhoneCodeExpired = phone ? getExpiresAt(CODE_EXPIRES_IN, 30 * 60) : null;
+  const refresh = randomToken();
+  const timeRefreshExpired = getExpiresAt(REFRESH_EXPIRES_IN, 30 * 24 * 60 * 60);
 
   const [user] = await dbWrite('users')
     .insert({
@@ -765,6 +771,8 @@ login.post('/login/register', async (c) => {
       role: REQUIRE_EMAIL_VERIFICATION ? UNVERIFIED_ROLE : VERIFIED_ROLE,
       locale,
       timezone,
+      refresh,
+      timeRefreshExpired,
       registerCode,
       registerCodeAttempts: 0,
       timeRegisterCodeExpired,
@@ -785,6 +793,7 @@ login.post('/login/register', async (c) => {
   c.set('result', {
     ...toPublicAuthUser(user),
     ok: true,
+    refresh,
     emailConfirmationRequired: true,
     phoneConfirmationRequired: !!phone,
   });
@@ -955,8 +964,8 @@ login.post('/login/restore', async (c) => {
     .update({
       password: passwordHash,
       salt,
-      refresh: null,
-      timeRefreshExpired: null,
+      refresh: randomToken(),
+      timeRefreshExpired: new Date(0),
       timePasswordChanged: dbWrite.fn.now(),
       recoverCode: null,
       recoverCodeAttempts: 0,

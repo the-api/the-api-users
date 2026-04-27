@@ -361,6 +361,13 @@ Successful auth responses include:
 }
 ```
 
+Refresh token behavior:
+
+- A successful login reuses the current refresh token while it is not expired.
+- If the stored refresh token is expired, password/OAuth login rotates it and returns a new one.
+- `POST /login/refresh` and `GET /login/refresh` keep the same refresh token and extend its expiry.
+- Password restore and user deletion invalidate existing refresh tokens by replacing them with an expired token.
+
 ## Request Examples
 
 The examples below follow the flows covered by the test suite. Use these placeholders:
@@ -406,12 +413,13 @@ With `AUTH_REQUIRE_EMAIL_VERIFICATION=true`, the user is created as `unverified`
     "ok": true,
     "email": "auth-user-1@test.local",
     "role": "unverified",
+    "refresh": "refresh-token...",
     "emailConfirmationRequired": true
   }
 }
 ```
 
-Before confirmation, password login returns `EMAIL_NOT_CONFIRMED`.
+Before confirmation, password login and refresh return `EMAIL_NOT_CONFIRMED`. After confirmation, the normal auth response includes a JWT and the same unexpired refresh token.
 
 ```bash
 curl -X POST "$API/login/register/confirm" \
@@ -466,6 +474,8 @@ curl -X POST "$API/login/refresh" \
 curl "$API/login/refresh?refresh=refresh-token-from-login"
 ```
 
+Password or OAuth login also keeps the current refresh token until it expires. If the stored refresh token has expired, login rotates it and returns the replacement.
+
 Current logged-in user:
 
 ```bash
@@ -493,7 +503,7 @@ curl -X POST "$API/login/restore" \
   }'
 ```
 
-After restore, log in with the new password.
+After restore, existing refresh tokens are invalidated. Log in with the new password to receive a new active refresh token.
 
 ### Own profile, password, e-mail and phone
 
@@ -621,6 +631,8 @@ curl -X DELETE "$API/users/$USER_ID" \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
+Deleting a user also invalidates their stored refresh token.
+
 ### Error handling
 
 Errors use the same response envelope. Branch on `result.name`; examples covered by the tests include `EMAIL_NOT_CONFIRMED`, `WRONG_CODE`, `INVALID_OR_EXPIRED_CODE`, `ACCESS_DENIED`, `NOT_FOUND` and `OAUTH_SERVICE_NOT_SUPPORTED`.
@@ -714,6 +726,8 @@ Field edit permissions:
 - `password`: nullable for OAuth-created users
 - `salt`: nullable for OAuth-created users
 - `email`: nullable for OAuth users created from a verified phone-only identity
+- `refresh`: generated for password and OAuth users; expired values are replaced on the next successful login
+- `timeRefreshExpired`: controls refresh validity and is set to an already expired date when refresh access is intentionally invalidated
 - `oauthProviders`: `jsonb` map keyed by service name
 
 Each provider record stores:

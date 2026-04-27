@@ -1883,6 +1883,8 @@ var createOAuthUser = async (c, identity) => {
     password: null,
     salt: null,
     role: getRoleAfterVerifiedIdentity(null),
+    refresh: randomToken(),
+    timeRefreshExpired: getExpiresAt(REFRESH_EXPIRES_IN, 30 * 24 * 60 * 60),
     oauthProviders: withOAuthProvider(null, identity)
   }).returning("*");
   return user;
@@ -2037,6 +2039,8 @@ login.post("/login/register", async (c) => {
   const timeRegisterCodeExpired = REQUIRE_EMAIL_VERIFICATION ? getExpiresAt(CODE_EXPIRES_IN, 30 * 60) : null;
   const phoneCode = phone ? randomCode() : null;
   const timePhoneCodeExpired = phone ? getExpiresAt(CODE_EXPIRES_IN, 30 * 60) : null;
+  const refresh = randomToken();
+  const timeRefreshExpired = getExpiresAt(REFRESH_EXPIRES_IN, 30 * 24 * 60 * 60);
   const [user] = await dbWrite("users").insert({
     login: loginName,
     password: passwordHash,
@@ -2050,6 +2054,8 @@ login.post("/login/register", async (c) => {
     role: REQUIRE_EMAIL_VERIFICATION ? UNVERIFIED_ROLE2 : VERIFIED_ROLE2,
     locale,
     timezone,
+    refresh,
+    timeRefreshExpired,
     registerCode,
     registerCodeAttempts: 0,
     timeRegisterCodeExpired,
@@ -2068,6 +2074,7 @@ login.post("/login/register", async (c) => {
   c.set("result", {
     ...toPublicAuthUser(user),
     ok: true,
+    refresh,
     emailConfirmationRequired: true,
     phoneConfirmationRequired: !!phone
   });
@@ -2200,8 +2207,8 @@ login.post("/login/restore", async (c) => {
   await dbWrite("users").where({ id: user.id }).update({
     password: passwordHash,
     salt,
-    refresh: null,
-    timeRefreshExpired: null,
+    refresh: randomToken(),
+    timeRefreshExpired: new Date(0),
     timePasswordChanged: dbWrite.fn.now(),
     recoverCode: null,
     recoverCodeAttempts: 0,
@@ -2725,6 +2732,8 @@ users.post("/users", async (c) => {
     isEmailVerified: body.isEmailVerified === true,
     isPhoneVerified: body.isPhoneVerified === true || !phone,
     timePasswordChanged: dbWrite.fn.now(),
+    refresh: randomToken(),
+    timeRefreshExpired: new Date(0),
     registerCode: emailVerificationCode,
     registerCodeAttempts: 0,
     timeRegisterCodeExpired: emailVerificationCode ? getExpiresAt(CODE_EXPIRES_IN2, 30 * 60) : null,
@@ -2853,8 +2862,8 @@ users.delete("/users/:id", async (c) => {
   await dbWrite("users").where({ id }).update({
     isDeleted: true,
     timeDeleted: dbWrite.fn.now(),
-    refresh: null,
-    timeRefreshExpired: null,
+    refresh: randomToken(),
+    timeRefreshExpired: new Date(0),
     timeUpdated: dbWrite.fn.now()
   });
   c.set("result", { ok: true });

@@ -64,6 +64,8 @@ describe('Users', () => {
       isEmailVerified: true,
       isPhoneVerified: true,
       role: 'registered',
+      refresh: 'owner-refresh',
+      timeRefreshExpired: new Date(0),
     });
 
     const owner = await db('users').where({ id: ownerUserId }).first();
@@ -178,8 +180,11 @@ describe('Users', () => {
 
   test('DELETE /users/:id by admin token', async () => {
     const { result } = await client.delete(`/users/${userId}`, tokens.admin);
+    const deletedUser = await db('users').where({ id: userId }).first();
 
     expect(result.ok).toEqual(true);
+    expect(typeof deletedUser.refresh).toEqual('string');
+    expect(new Date(deletedUser.timeRefreshExpired).getTime() <= Date.now()).toEqual(true);
   });
 
   test('GET /users/:id after delete', async () => {

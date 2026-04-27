@@ -446,6 +446,8 @@ describe('OAuth', () => {
         fullName: 'Linked User',
         role: 'registered',
         isEmailVerified: true,
+        refresh: 'linked-refresh',
+        timeRefreshExpired: new Date(0),
       })
       .returning('*');
 

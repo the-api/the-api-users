@@ -7,6 +7,7 @@ import {
   normalizePhone,
   randomCode,
   randomSalt,
+  randomToken,
 } from '../lib/auth';
 import {
   deleteStoredFile,
@@ -297,6 +298,8 @@ users.post('/users', async (c) => {
     isEmailVerified: body.isEmailVerified === true,
     isPhoneVerified: body.isPhoneVerified === true || !phone,
     timePasswordChanged: dbWrite.fn.now(),
+    refresh: randomToken(),
+    timeRefreshExpired: new Date(0),
     registerCode: emailVerificationCode,
     registerCodeAttempts: 0,
     timeRegisterCodeExpired: emailVerificationCode ? getExpiresAt(CODE_EXPIRES_IN, 30 * 60) : null,
@@ -432,8 +435,8 @@ users.delete('/users/:id', async (c) => {
     .update({
       isDeleted: true,
       timeDeleted: dbWrite.fn.now(),
-      refresh: null,
-      timeRefreshExpired: null,
+      refresh: randomToken(),
+      timeRefreshExpired: new Date(0),
       timeUpdated: dbWrite.fn.now(),
     });
 
