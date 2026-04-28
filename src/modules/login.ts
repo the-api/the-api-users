@@ -302,6 +302,33 @@ const ensureLoginUnique = async (
   if (existing) throw new Error('LOGIN_EXISTS');
 };
 
+const getRandomOAuthLoginNumber = (): number => Math.floor(Math.random() * 9999) + 1;
+const MAX_OAUTH_LOGIN_ATTEMPTS = 100;
+
+const getOAuthLoginBase = (identityValue: string): string => identityValue.split('@')[0] || identityValue;
+
+const formatOAuthLogin = (base: string, number: number): string => {
+  const suffix = String(number);
+  return `${base.slice(0, Math.max(0, 255 - suffix.length))}${suffix}`;
+};
+
+const createUniqueOAuthLogin = async (c: AppContext, identityValue: string): Promise<string> => {
+  const base = getOAuthLoginBase(identityValue);
+  let number = getRandomOAuthLoginNumber();
+  let attempts = 0;
+
+  while (attempts < MAX_OAUTH_LOGIN_ATTEMPTS) {
+    attempts += 1;
+    const loginName = formatOAuthLogin(base, number);
+    const existing = await findUserByLogin(c, loginName);
+    if (!existing) return loginName;
+
+    number += getRandomOAuthLoginNumber();
+  }
+
+  throw new Error('LOGIN_EXISTS');
+};
+
 const saveAuthResult = async (
   c: AppContext,
   user: UserRecord,
@@ -547,14 +574,17 @@ const createOAuthUser = async (c: AppContext, identity: OAuthIdentity): Promise<
   const dbWrite = getDbWrite(c);
   const email = identity.email || null;
   const phone = identity.phone ? normalizePhone(identity.phone) : null;
+  const identityValue = email || phone;
 
-  if (!email && !phone) throw new Error('OAUTH_IDENTITY_REQUIRED');
+  if (!identityValue) throw new Error('OAUTH_IDENTITY_REQUIRED');
 
   if (email) await ensureEmailUnique(c, email);
   if (phone) await ensurePhoneUnique(c, phone);
+  const loginName = await createUniqueOAuthLogin(c, identityValue);
 
   const [user] = await dbWrite('users')
     .insert({
+      login: loginName,
       email,
       isEmailVerified: !!email,
       phone,

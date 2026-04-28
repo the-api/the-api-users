@@ -196,6 +196,9 @@ Rules implemented by the module:
 - If the provider account is already linked, the user gets normal `token` + `refresh`.
 - If the provider returns an e-mail or phone that belongs to an existing user, that user is logged in and the provider is linked automatically.
 - If no user exists, a new user is created with `password = null` and `salt = null`.
+- New OAuth users get an automatic `login` from the e-mail local part plus a random number from `1` to `9999`.
+- If that `login` already exists, the module adds another random number from `1` to `9999` to the current number and retries until a free `login` is found.
+- OAuth `login` generation stops after 100 attempts and returns `LOGIN_EXISTS`.
 - If OAuth returns e-mail or phone, that identity is treated as verified.
 - If the user role was `unverified`, it is promoted to `registered`.
 - If `Authorization: Bearer <our-token>` is sent to `POST /login/{service}`, the provider is linked to the current user.
@@ -725,6 +728,7 @@ Field edit permissions:
 
 - `password`: nullable for OAuth-created users
 - `salt`: nullable for OAuth-created users
+- `login`: generated for OAuth-created users from the e-mail local part plus a random numeric suffix; collisions are retried by increasing the suffix, up to 100 attempts
 - `email`: nullable for OAuth users created from a verified phone-only identity
 - `refresh`: generated for password and OAuth users; expired values are replaced on the next successful login
 - `timeRefreshExpired`: controls refresh validity and is set to an already expired date when refresh access is intentionally invalidated

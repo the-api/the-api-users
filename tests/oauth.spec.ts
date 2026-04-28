@@ -123,6 +123,19 @@ const oauthFetch: typeof fetch = async (input, init) => {
       });
     }
 
+    if (token === 'google-login-collision-token') {
+      return jsonResponse({
+        id: 'google-user-login-collision',
+        email: 'collision-user@test.local',
+        verified_email: true,
+        name: 'Collision User',
+        given_name: 'Collision',
+        family_name: 'User',
+        picture: 'https://cdn.test/google-user-login-collision.png',
+        locale: 'en',
+      });
+    }
+
     return jsonResponse({ error: 'invalid_token' }, 401);
   }
 
@@ -338,7 +351,30 @@ describe('OAuth', () => {
     expect(user.salt).toEqual(null);
     expect(user.isEmailVerified).toEqual(true);
     expect(user.role).toEqual('registered');
+    expect(user.login).toMatch(/^oauth-new\d+$/);
     expect(user.oauthProviders.google.externalId).toEqual('google-user-1');
+  });
+
+  test('POST /login/google increments OAuth login number until it is unique', async () => {
+    await client.db('users').insert({
+      login: 'collision-user1000',
+      email: 'collision-login-existing@test.local',
+      isEmailVerified: true,
+      role: 'registered',
+    });
+
+    const originalRandom = Math.random;
+    Math.random = () => 999 / 9999;
+
+    try {
+      const { result } = await client.post('/login/google', { accessToken: 'google-login-collision-token' });
+      const user = await client.db('users').where({ email: 'collision-user@test.local' }).first();
+
+      expect(result.email).toEqual('collision-user@test.local');
+      expect(user.login).toEqual('collision-user2000');
+    } finally {
+      Math.random = originalRandom;
+    }
   });
 
   test('POST /login/facebook registers a new user', async () => {

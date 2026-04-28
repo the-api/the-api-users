@@ -1703,9 +1703,30 @@ var ensureLoginUnique = async (c, loginName, exceptUserId) => {
   if (existing)
     throw new Error("LOGIN_EXISTS");
 };
+var getRandomOAuthLoginNumber = () => Math.floor(Math.random() * 9999) + 1;
+var MAX_OAUTH_LOGIN_ATTEMPTS = 100;
+var getOAuthLoginBase = (identityValue) => identityValue.split("@")[0] || identityValue;
+var formatOAuthLogin = (base, number) => {
+  const suffix = String(number);
+  return `${base.slice(0, Math.max(0, 255 - suffix.length))}${suffix}`;
+};
+var createUniqueOAuthLogin = async (c, identityValue) => {
+  const base = getOAuthLoginBase(identityValue);
+  let number = getRandomOAuthLoginNumber();
+  let attempts = 0;
+  while (attempts < MAX_OAUTH_LOGIN_ATTEMPTS) {
+    attempts += 1;
+    const loginName = formatOAuthLogin(base, number);
+    const existing = await findUserByLogin(c, loginName);
+    if (!existing)
+      return loginName;
+    number += getRandomOAuthLoginNumber();
+  }
+  throw new Error("LOGIN_EXISTS");
+};
 var saveAuthResult = async (c, user, refreshOverride) => {
   const dbWrite = getDbWrite(c);
-  const refresh = refreshOverride || user.refresh || randomToken();
+  const refresh = refreshOverride || (!isExpired(user.timeRefreshExpired) ? user.refresh : undefined) || randomToken();
   const timeRefreshExpired = getExpiresAt(REFRESH_EXPIRES_IN, 30 * 24 * 60 * 60);
   await dbWrite("users").where({ id: user.id }).update({
     refresh,
@@ -1866,13 +1887,16 @@ var createOAuthUser = async (c, identity) => {
   const dbWrite = getDbWrite(c);
   const email = identity.email || null;
   const phone = identity.phone ? normalizePhone(identity.phone) : null;
-  if (!email && !phone)
+  const identityValue = email || phone;
+  if (!identityValue)
     throw new Error("OAUTH_IDENTITY_REQUIRED");
   if (email)
     await ensureEmailUnique(c, email);
   if (phone)
     await ensurePhoneUnique(c, phone);
+  const loginName = await createUniqueOAuthLogin(c, identityValue);
   const [user] = await dbWrite("users").insert({
+    login: loginName,
     email,
     isEmailVerified: !!email,
     phone,
