@@ -47,6 +47,12 @@ const applePrivateKey = createPrivateKey(appleKeyPair.privateKey.export({ format
 const applePublicJwk = createPublicKey(appleKeyPair.publicKey.export({ format: 'pem', type: 'spki' }))
   .export({ format: 'jwk' });
 const APPLE_KID = 'apple-test-key';
+const appleClientSecretKeyPair = generateKeyPairSync('ec', { namedCurve: 'P-256' });
+const appleClientSecretPrivateKey = appleClientSecretKeyPair.privateKey
+  .export({ format: 'pem', type: 'pkcs8' })
+  .toString();
+const APPLE_DYNAMIC_TEAM_ID = 'apple-dynamic-team';
+const APPLE_DYNAMIC_KEY_ID = 'apple-dynamic-key';
 
 const jsonResponse = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), {
@@ -72,6 +78,57 @@ const createAppleIdToken = (payload: Record<string, unknown>): string => {
   const signingInput = `${encodedHeader}.${encodedPayload}`;
   const signature = cryptoSign('RSA-SHA256', Buffer.from(signingInput), applePrivateKey);
   return `${signingInput}.${toBase64Url(signature)}`;
+};
+
+const fromBase64Url = (value: string): Buffer => {
+  const normalized = value
+    .replace(/-/g, '+')
+    .replace(/_/g, '/')
+    .padEnd(Math.ceil(value.length / 4) * 4, '=');
+
+  return Buffer.from(normalized, 'base64');
+};
+
+const decodeJwtPart = (value: string): Record<string, unknown> =>
+  JSON.parse(fromBase64Url(value).toString('utf8'));
+
+const isDynamicAppleClientSecret = (clientSecret: string): boolean => {
+  const [headerPart, payloadPart] = clientSecret.split('.');
+  if (!headerPart || !payloadPart) return false;
+
+  const header = decodeJwtPart(headerPart);
+  const payload = decodeJwtPart(payloadPart);
+
+  return header.alg === 'ES256'
+    && header.kid === APPLE_DYNAMIC_KEY_ID
+    && payload.iss === APPLE_DYNAMIC_TEAM_ID
+    && payload.sub === 'apple-client-id'
+    && payload.aud === 'https://appleid.apple.com';
+};
+
+const getRequestBodyParams = (body: BodyInit | null | undefined): URLSearchParams => {
+  if (!body) return new URLSearchParams();
+  if (body instanceof URLSearchParams) return body;
+  if (typeof body === 'string') return new URLSearchParams(body);
+  return new URLSearchParams(body.toString());
+};
+
+const createAppleTokenResponse = (sub: string, email: string): Response => {
+  const now = Math.floor(Date.now() / 1000);
+  return jsonResponse({
+    access_token: `${sub}-access-token`,
+    expires_in: 3600,
+    refresh_token: `${sub}-refresh-token`,
+    id_token: createAppleIdToken({
+      iss: 'https://appleid.apple.com',
+      aud: 'apple-client-id',
+      exp: now + 3600,
+      iat: now,
+      sub,
+      email,
+      email_verified: true,
+    }),
+  });
 };
 
 const getBearerToken = (headers: HeadersInit | undefined): string => {
@@ -249,6 +306,25 @@ const oauthFetch: typeof fetch = async (input, init) => {
     }
 
     return jsonResponse({ error: 'invalid_token' }, 401);
+  }
+
+  if (url === 'https://appleid.apple.com/auth/token') {
+    const params = getRequestBodyParams(init?.body);
+    const code = params.get('code');
+    const clientSecret = params.get('client_secret') || '';
+    const hasExpectedBaseParams = params.get('client_id') === 'apple-client-id'
+      && params.get('grant_type') === 'authorization_code'
+      && params.get('redirect_uri') === 'https://app.test.local/auth/apple/callback';
+
+    if (hasExpectedBaseParams && code === 'apple-register-code' && clientSecret === 'apple-client-secret') {
+      return createAppleTokenResponse('apple-code-user-1', 'apple-code-new@test.local');
+    }
+
+    if (hasExpectedBaseParams && code === 'apple-dynamic-code' && isDynamicAppleClientSecret(clientSecret)) {
+      return createAppleTokenResponse('apple-dynamic-user-1', 'apple-dynamic-new@test.local');
+    }
+
+    return jsonResponse({ error: clientSecret.includes('.') ? 'invalid_grant' : 'invalid_client' }, 400);
   }
 
   if (url === 'https://appleid.apple.com/auth/keys') {
@@ -463,6 +539,66 @@ describe('OAuth', () => {
     expect(body.result.oauthServices).toEqual(['apple']);
     expect(user.oauthProviders.apple.externalId).toEqual('apple-user-1');
     expect(user.fullName).toEqual('Apple User');
+  });
+
+  test('POST /login/apple exchanges authorization code and registers a new user', async () => {
+    const response = await theAPI.app.fetch(new Request('http://localhost:7788/login/apple', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        code: 'apple-register-code',
+        user: JSON.stringify({
+          name: {
+            firstName: 'Code',
+            lastName: 'User',
+          },
+        }),
+      }),
+    }));
+    const body = await response.json();
+    const user = await client.db('users').where({ email: 'apple-code-new@test.local' }).first();
+
+    expect(response.status).toEqual(200);
+    expect(body.result.email).toEqual('apple-code-new@test.local');
+    expect(body.result.role).toEqual('registered');
+    expect(body.result.isEmailVerified).toEqual(true);
+    expect(body.result.oauthServices).toEqual(['apple']);
+    expect(user.oauthProviders.apple.externalId).toEqual('apple-code-user-1');
+    expect(user.fullName).toEqual('Code User');
+  });
+
+  test('POST /login/apple prefers dynamic client secret credentials over configured static secret', async () => {
+    const originalClientSecret = process.env.AUTH_APPLE_CLIENT_SECRET;
+    const originalTeamId = process.env.AUTH_APPLE_TEAM_ID;
+    const originalKeyId = process.env.AUTH_APPLE_KEY_ID;
+    const originalPrivateKey = process.env.AUTH_APPLE_PRIVATE_KEY;
+
+    process.env.AUTH_APPLE_CLIENT_SECRET = 'bad-static-secret';
+    process.env.AUTH_APPLE_TEAM_ID = APPLE_DYNAMIC_TEAM_ID;
+    process.env.AUTH_APPLE_KEY_ID = APPLE_DYNAMIC_KEY_ID;
+    process.env.AUTH_APPLE_PRIVATE_KEY = appleClientSecretPrivateKey;
+
+    try {
+      const { result } = await client.post('/login/apple', {
+        code: 'apple-dynamic-code',
+      });
+      const user = await client.db('users').where({ email: 'apple-dynamic-new@test.local' }).first();
+
+      expect(result.email).toEqual('apple-dynamic-new@test.local');
+      expect(result.oauthServices).toEqual(['apple']);
+      expect(user.oauthProviders.apple.externalId).toEqual('apple-dynamic-user-1');
+    } finally {
+      if (originalClientSecret === undefined) delete process.env.AUTH_APPLE_CLIENT_SECRET;
+      else process.env.AUTH_APPLE_CLIENT_SECRET = originalClientSecret;
+      if (originalTeamId === undefined) delete process.env.AUTH_APPLE_TEAM_ID;
+      else process.env.AUTH_APPLE_TEAM_ID = originalTeamId;
+      if (originalKeyId === undefined) delete process.env.AUTH_APPLE_KEY_ID;
+      else process.env.AUTH_APPLE_KEY_ID = originalKeyId;
+      if (originalPrivateKey === undefined) delete process.env.AUTH_APPLE_PRIVATE_KEY;
+      else process.env.AUTH_APPLE_PRIVATE_KEY = originalPrivateKey;
+    }
   });
 
   test('POST /login/google matches existing unverified user by email and upgrades verification', async () => {

@@ -634,32 +634,39 @@ var getApplePrivateKey = () => {
   return privateKey.replace(/\\n/g, `
 `);
 };
-var createAppleClientSecret = () => {
+var getAppleClientSecretConfig = () => {
   const clientId = getEnv("AUTH_APPLE_CLIENT_ID");
   const teamId = getEnv("AUTH_APPLE_TEAM_ID");
   const keyId = getEnv("AUTH_APPLE_KEY_ID");
   const privateKey = getApplePrivateKey();
-  if (!clientId || !teamId || !keyId || !privateKey) {
-    throw new Error("OAUTH_CONFIG_NOT_FOUND");
-  }
+  if (!clientId || !teamId || !keyId || !privateKey)
+    return null;
+  return {
+    clientId,
+    teamId,
+    keyId,
+    privateKey
+  };
+};
+var createAppleClientSecret = (config) => {
   const now = Math.floor(Date.now() / 1000);
   const header = {
     alg: "ES256",
-    kid: keyId,
+    kid: config.keyId,
     typ: "JWT"
   };
   const payload = {
-    iss: teamId,
+    iss: config.teamId,
     iat: now,
     exp: now + 60 * 60 * 24 * 180,
     aud: APPLE_AUDIENCE,
-    sub: clientId
+    sub: config.clientId
   };
   const encodedHeader = toBase64Url(Buffer.from(JSON.stringify(header)));
   const encodedPayload = toBase64Url(Buffer.from(JSON.stringify(payload)));
   const signingInput = `${encodedHeader}.${encodedPayload}`;
   const signature = cryptoSign("sha256", Buffer.from(signingInput), {
-    key: createPrivateKey(privateKey),
+    key: createPrivateKey(config.privateKey),
     dsaEncoding: "ieee-p1363"
   });
   return `${signingInput}.${toBase64Url(signature)}`;
@@ -667,7 +674,8 @@ var createAppleClientSecret = () => {
 var getAppleConfig = () => {
   const clientId = getEnv("AUTH_APPLE_CLIENT_ID");
   const redirectUri = getEnv("AUTH_APPLE_REDIRECT_URI", "AUTH_APPLE_CALLBACK_URL");
-  const clientSecret = getEnv("AUTH_APPLE_CLIENT_SECRET") || createAppleClientSecret();
+  const dynamicSecretConfig = getAppleClientSecretConfig();
+  const clientSecret = dynamicSecretConfig ? createAppleClientSecret(dynamicSecretConfig) : getEnv("AUTH_APPLE_CLIENT_SECRET");
   if (!clientId || !clientSecret || !redirectUri)
     throw new Error("OAUTH_CONFIG_NOT_FOUND");
   return {

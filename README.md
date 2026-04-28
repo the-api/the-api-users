@@ -154,7 +154,7 @@ Twitter/X OAuth:
 Apple OAuth:
 
 - `AUTH_APPLE_CLIENT_ID`
-- `AUTH_APPLE_CLIENT_SECRET`
+- `AUTH_APPLE_CLIENT_SECRET` (optional pre-generated client secret JWT)
 - `AUTH_APPLE_REDIRECT_URI`
 - `AUTH_APPLE_SCOPE`
 - `AUTH_APPLE_TEAM_ID`
@@ -171,8 +171,9 @@ Notes:
 
 - Legacy aliases `AUTH_GOOGLE_CALLBACK_URL` and `AUTH_GITHUB_CALLBACK_URL` are also accepted.
 - GitHub login should request `user:email`, otherwise the provider may not return a usable e-mail.
-- Apple can use either a pre-generated `AUTH_APPLE_CLIENT_SECRET` or dynamic secret generation via `AUTH_APPLE_TEAM_ID` + `AUTH_APPLE_KEY_ID` + `AUTH_APPLE_PRIVATE_KEY`.
+- Apple can use either a pre-generated `AUTH_APPLE_CLIENT_SECRET` JWT or dynamic secret generation via `AUTH_APPLE_TEAM_ID` + `AUTH_APPLE_KEY_ID` + `AUTH_APPLE_PRIVATE_KEY`. Dynamic credentials are preferred when all three are present.
 - Apple browser callbacks use `response_mode=form_post`, so your frontend callback should accept form posts or forward the received fields to `POST /login/apple`.
+- Apple `AUTH_APPLE_REDIRECT_URI` must exactly match the return URL used in the Apple authorization request and registered for the Services ID, even when that frontend URL forwards the callback to a different API host.
 - Microsoft Entra ID login uses the v2 endpoint and defaults to tenant `common` unless `AUTH_MICROSOFT_TENANT_ID` is set.
 - If a provider is not fully configured with required `AUTH_*` variables, `GET /login/{service}` and `POST /login/{service}` respond with `404` the same way as an unavailable provider.
 - Twitter/X usually does not return e-mail in the standard OAuth profile. First-time sign-in will work only if the provider returns a usable e-mail/phone or if the request is linking to an already authenticated user.
@@ -291,9 +292,12 @@ Apple `form_post` callbacks can be forwarded as URL-encoded form data:
 ```bash
 curl -X POST "$API/login/apple" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  --data-urlencode "id_token=apple-id-token" \
+  --data-urlencode "code=apple-authorization-code" \
+  --data-urlencode "state=provider-state-from-callback" \
   --data-urlencode 'user={"name":{"firstName":"Apple","lastName":"User"}}'
 ```
+
+`id_token` / `idToken` is also accepted when the Apple client flow already provides it.
 
 ### Linking to an existing logged-in user
 
