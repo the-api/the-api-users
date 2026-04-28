@@ -195,7 +195,7 @@ Rules implemented by the module:
 
 - If the provider account is already linked, the user gets normal `token` + `refresh`.
 - If the provider returns an e-mail or phone that belongs to an existing user, that user is logged in and the provider is linked automatically.
-- If no user exists, a new user is created with `password = null` and `salt = null`.
+- If no user exists, a new user is created without a local password: `password = ""` and a generated non-null `salt`.
 - New OAuth users get an automatic `login` from the e-mail local part plus a random number from `1` to `9999`.
 - If that `login` already exists, the module adds another random number from `1` to `9999` to the current number and retries until a free `login` is found.
 - OAuth `login` generation stops after 100 attempts and returns `LOGIN_EXISTS`.
@@ -726,8 +726,8 @@ Field edit permissions:
 
 `users` now contains OAuth metadata:
 
-- `password`: nullable for OAuth-created users
-- `salt`: nullable for OAuth-created users
+- `password`: empty for OAuth-created users until they set or restore a local password
+- `salt`: generated for OAuth-created users so stricter schemas can keep it non-null
 - `login`: generated for OAuth-created users from the e-mail local part plus a random numeric suffix; collisions are retried by increasing the suffix, up to 100 attempts
 - `email`: nullable for OAuth users created from a verified phone-only identity
 - `refresh`: generated for password and OAuth users; expired values are replaced on the next successful login

@@ -1895,22 +1895,41 @@ var createOAuthUser = async (c, identity) => {
   if (phone)
     await ensurePhoneUnique(c, phone);
   const loginName = await createUniqueOAuthLogin(c, identityValue);
-  const [user] = await dbWrite("users").insert({
+  const fullName = identity.fullName || null;
+  const avatar = identity.avatar || null;
+  const locale = identity.locale || null;
+  const payload = {
+    timeCreated: dbWrite.fn.now(),
+    isBlocked: false,
+    isDeleted: false,
     login: loginName,
-    email,
     isEmailVerified: !!email,
-    phone,
+    isEmailInvalid: false,
     isPhoneVerified: !!phone,
-    fullName: identity.fullName || null,
-    avatar: identity.avatar || null,
-    locale: identity.locale || null,
-    password: null,
-    salt: null,
+    isPhoneInvalid: false,
+    password: "",
+    salt: randomSalt(),
     role: getRoleAfterVerifiedIdentity(null),
     refresh: randomToken(),
     timeRefreshExpired: getExpiresAt(REFRESH_EXPIRES_IN, 30 * 24 * 60 * 60),
-    oauthProviders: withOAuthProvider(null, identity)
-  }).returning("*");
+    oauthProviders: withOAuthProvider(null, identity),
+    registerCodeAttempts: 0,
+    recoverCodeAttempts: 0,
+    phoneCodeAttempts: 0,
+    phoneChangeCodeAttempts: 0,
+    emailChangeCodeAttempts: 0
+  };
+  if (email)
+    payload.email = email;
+  if (phone)
+    payload.phone = phone;
+  if (fullName)
+    payload.fullName = fullName;
+  if (avatar)
+    payload.avatar = avatar;
+  if (locale)
+    payload.locale = locale;
+  const [user] = await dbWrite("users").insert(payload).returning("*");
   return user;
 };
 var syncUserWithOAuthIdentity = async (c, user, identity) => {

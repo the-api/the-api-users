@@ -337,6 +337,11 @@ describe('OAuth', () => {
   });
 
   test('POST /login/google registers a new user and stores OAuth profile', async () => {
+    await client.db.schema.alterTable('users', (table) => {
+      table.string('password', 255).notNullable().alter();
+      table.string('salt', 255).notNullable().alter();
+    });
+
     const { result } = await client.post('/login/google', { accessToken: 'google-register-token' });
     const user = await client.db('users').where({ email: 'oauth-new@test.local' }).first();
 
@@ -347,9 +352,20 @@ describe('OAuth', () => {
     expect(typeof result.token).toEqual('string');
     expect(typeof result.refresh).toEqual('string');
 
-    expect(user.password).toEqual(null);
-    expect(user.salt).toEqual(null);
+    expect(user.password).toEqual('');
+    expect(typeof user.salt).toEqual('string');
+    expect(user.salt.length > 0).toEqual(true);
     expect(user.isEmailVerified).toEqual(true);
+    expect(user.isPhoneVerified).toEqual(false);
+    expect(user.isBlocked).toEqual(false);
+    expect(user.isDeleted).toEqual(false);
+    expect(user.isEmailInvalid).toEqual(false);
+    expect(user.isPhoneInvalid).toEqual(false);
+    expect(user.registerCodeAttempts).toEqual(0);
+    expect(user.recoverCodeAttempts).toEqual(0);
+    expect(user.phoneCodeAttempts).toEqual(0);
+    expect(user.phoneChangeCodeAttempts).toEqual(0);
+    expect(user.emailChangeCodeAttempts).toEqual(0);
     expect(user.role).toEqual('registered');
     expect(user.login).toMatch(/^oauth-new\d+$/);
     expect(user.oauthProviders.google.externalId).toEqual('google-user-1');
@@ -359,6 +375,8 @@ describe('OAuth', () => {
     await client.db('users').insert({
       login: 'collision-user1000',
       email: 'collision-login-existing@test.local',
+      password: '',
+      salt: randomSalt(),
       isEmailVerified: true,
       role: 'registered',
     });
