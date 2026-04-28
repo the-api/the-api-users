@@ -364,7 +364,7 @@ describe('OAuth', () => {
     });
 
     const originalRandom = Math.random;
-    Math.random = () => 999 / 9999;
+    Math.random = () => 0.1;
 
     try {
       const { result } = await client.post('/login/google', { accessToken: 'google-login-collision-token' });
