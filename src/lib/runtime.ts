@@ -5,10 +5,15 @@ import type { AppContext, RolesService } from 'the-api-routings';
 import { randomToken } from './auth';
 
 export type AuthUser = {
-  id?: number | string;
+  userId?: number | string;
   role?: string | null;
   roles?: string[];
   [key: string]: unknown;
+};
+
+export type AuthenticatedUser = AuthUser & {
+  userId: number | string;
+  roles: string[];
 };
 
 export type UserRecord = {
@@ -94,14 +99,20 @@ export const getDbWrite = (c: AppContext): Knex => {
 export const getRequestUser = (c: AppContext): AuthUser =>
   ((c.var.user || {}) as AuthUser);
 
-export const requireAuth = (c: AppContext): AuthUser => {
-  const user = getRequestUser(c);
+export const getAuthUserId = (user: AuthUser | null | undefined): number | string | undefined => {
+  const userId = user?.userId;
+  return userId === undefined || userId === null || userId === '' ? undefined : userId;
+};
 
-  if (!user.id || !Array.isArray(user.roles) || user.roles.includes('guest')) {
+export const requireAuth = (c: AppContext): AuthenticatedUser => {
+  const user = getRequestUser(c);
+  const userId = getAuthUserId(user);
+
+  if (userId === undefined || !Array.isArray(user.roles) || user.roles.includes('guest')) {
     throw new Error('NO_TOKEN');
   }
 
-  return user;
+  return { ...user, userId, roles: user.roles };
 };
 
 export const isUserIdentityVerified = (
@@ -160,7 +171,8 @@ export const sanitizeUser = ({
 
   const permissions = service.getPermissions(getUserRoles(requestUser));
   const ownerPermissionMap = service.getPermissions(ownerPermissions);
-  const isOwner = !!requestUser.id && `${requestUser.id}` === `${user.id}`;
+  const requestUserId = getAuthUserId(requestUser);
+  const isOwner = requestUserId !== undefined && `${requestUserId}` === `${user.id}`;
 
   for (const [permission, fields] of Object.entries(visibleFor)) {
     const canSee = service.checkWildcardPermissions({

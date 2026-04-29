@@ -32,6 +32,7 @@ import {
   verifyPassword,
 } from '../lib/auth';
 import {
+  getAuthUserId,
   getDb,
   getDbWrite,
   getRequestUser,
@@ -349,7 +350,7 @@ const saveAuthResult = async (
     });
 
   const token = signJwt({
-    id: user.id,
+    userId: user.id,
     role: user.role || (isUserIdentityVerified(user) ? VERIFIED_ROLE : UNVERIFIED_ROLE),
     roles: getUserRoles(user),
     email: user.email || undefined,
@@ -509,7 +510,7 @@ const sendPhoneConfirmationCode = async (c: AppContext, phone: string, code: str
 const getCurrentUserRecord = async (c: AppContext): Promise<UserRecord> => {
   const authUser = requireAuth(c);
   const db = getDb(c);
-  const user = await db('users').where({ id: authUser.id }).first() as UserRecord | undefined;
+  const user = await db('users').where({ id: authUser.userId }).first() as UserRecord | undefined;
   return assertUserActive(user);
 };
 
@@ -529,13 +530,14 @@ const getConfirmationPayload = async (c: AppContext, target: 'email' | 'phone') 
 
 const getOptionalCurrentUserRecord = async (c: AppContext): Promise<UserRecord | undefined> => {
   const authUser = getRequestUser(c);
+  const authUserId = getAuthUserId(authUser);
 
-  if (!authUser.id || !Array.isArray(authUser.roles) || authUser.roles.includes('guest')) {
+  if (authUserId === undefined || !Array.isArray(authUser.roles) || authUser.roles.includes('guest')) {
     return undefined;
   }
 
   const db = getDb(c);
-  const user = await db('users').where({ id: authUser.id }).first() as UserRecord | undefined;
+  const user = await db('users').where({ id: authUserId }).first() as UserRecord | undefined;
   return assertUserActive(user);
 };
 
@@ -1117,7 +1119,7 @@ login.patch('/login', async (c) => {
 
   if (Object.keys(updates).length) {
     await dbWrite('users')
-      .where({ id: authUser.id })
+      .where({ id: authUser.userId })
       .update({
         ...updates,
         timeUpdated: dbWrite.fn.now(),

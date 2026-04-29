@@ -1,7 +1,13 @@
 import { expect, test, describe } from 'bun:test';
 import { middlewares, testClient } from 'the-api';
 
-import { users, migrationDir } from '../src';
+import { login, users, migrationDir } from '../src';
+
+const decodeJwtPayload = (token: string): Record<string, unknown> => {
+  const payload = token.split('.')[1] || '';
+  const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+  return JSON.parse(Buffer.from(normalized, 'base64').toString('utf8')) as Record<string, unknown>;
+};
 
 const roles = {
   root: ['*'],
@@ -36,7 +42,7 @@ const roles = {
 
 const { theAPI, client, tokens, users: testUsers, db } = await testClient({
   migrationDirs: [migrationDir],
-  routings: [middlewares.files, users],
+  routings: [middlewares.files, login, users],
   roles,
 });
 
@@ -116,6 +122,30 @@ describe('Users', () => {
 
     expect(result.email).toEqual('owner-user@test.local');
     expect(result.phone).toEqual('+15551111111');
+    expect(result.password).toEqual(undefined);
+  });
+
+  test('GET /users/:id by generated token uses userId payload for owner checks', async () => {
+    const owner = {
+      email: 'generated-owner@test.local',
+      password: 'owner-pass-1',
+      fullName: 'Generated Owner',
+    };
+
+    await client.post('/login/register', owner);
+    const user = await db('users').where({ email: owner.email }).first();
+    const { result: auth } = await client.post('/login/register/confirm', {
+      email: owner.email,
+      code: user.registerCode,
+    });
+
+    const payload = decodeJwtPayload(auth.token);
+    expect(payload.userId).toEqual(auth.id);
+    expect(payload.id).toEqual(undefined);
+
+    const { result } = await client.get(`/users/${auth.id}`, auth.token);
+
+    expect(result.email).toEqual(owner.email);
     expect(result.password).toEqual(undefined);
   });
 

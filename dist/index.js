@@ -311,12 +311,17 @@ var getDbWrite = (c) => {
   return db;
 };
 var getRequestUser = (c) => c.var.user || {};
+var getAuthUserId = (user) => {
+  const userId = user?.userId;
+  return userId === undefined || userId === null || userId === "" ? undefined : userId;
+};
 var requireAuth = (c) => {
   const user = getRequestUser(c);
-  if (!user.id || !Array.isArray(user.roles) || user.roles.includes("guest")) {
+  const userId = getAuthUserId(user);
+  if (userId === undefined || !Array.isArray(user.roles) || user.roles.includes("guest")) {
     throw new Error("NO_TOKEN");
   }
-  return user;
+  return { ...user, userId, roles: user.roles };
 };
 var isUserIdentityVerified = (user) => {
   if (!user)
@@ -356,7 +361,8 @@ var sanitizeUser = ({
   }
   const permissions = service.getPermissions(getUserRoles(requestUser));
   const ownerPermissionMap = service.getPermissions(ownerPermissions);
-  const isOwner = !!requestUser.id && `${requestUser.id}` === `${user.id}`;
+  const requestUserId = getAuthUserId(requestUser);
+  const isOwner = requestUserId !== undefined && `${requestUserId}` === `${user.id}`;
   for (const [permission, fields] of Object.entries(visibleFor)) {
     const canSee = service.checkWildcardPermissions({
       key: permission,
@@ -1742,7 +1748,7 @@ var saveAuthResult = async (c, user, refreshOverride) => {
     timeUpdated: dbWrite.fn.now()
   });
   const token = signJwt({
-    id: user.id,
+    userId: user.id,
     role: user.role || (isUserIdentityVerified(user) ? VERIFIED_ROLE2 : UNVERIFIED_ROLE2),
     roles: getUserRoles(user),
     email: user.email || undefined,
@@ -1849,7 +1855,7 @@ var sendPhoneConfirmationCode = async (c, phone, code) => {
 var getCurrentUserRecord = async (c) => {
   const authUser = requireAuth(c);
   const db = getDb(c);
-  const user = await db("users").where({ id: authUser.id }).first();
+  const user = await db("users").where({ id: authUser.userId }).first();
   return assertUserActive(user);
 };
 var getBodyObject = (c) => c.var.body && typeof c.var.body === "object" && !Array.isArray(c.var.body) ? c.var.body : {};
@@ -1862,11 +1868,12 @@ var getConfirmationPayload = async (c, target) => {
 };
 var getOptionalCurrentUserRecord = async (c) => {
   const authUser = getRequestUser(c);
-  if (!authUser.id || !Array.isArray(authUser.roles) || authUser.roles.includes("guest")) {
+  const authUserId = getAuthUserId(authUser);
+  if (authUserId === undefined || !Array.isArray(authUser.roles) || authUser.roles.includes("guest")) {
     return;
   }
   const db = getDb(c);
-  const user = await db("users").where({ id: authUser.id }).first();
+  const user = await db("users").where({ id: authUserId }).first();
   return assertUserActive(user);
 };
 var shouldRequireVerifiedIdentity = (user) => REQUIRE_EMAIL_VERIFICATION && !isUserIdentityVerified(user);
@@ -2351,7 +2358,7 @@ login.patch("/login", async (c) => {
     }
   }
   if (Object.keys(updates).length) {
-    await dbWrite("users").where({ id: authUser.id }).update({
+    await dbWrite("users").where({ id: authUser.userId }).update({
       ...updates,
       timeUpdated: dbWrite.fn.now()
     });
@@ -2922,7 +2929,7 @@ users.delete("/users/:id", async (c) => {
 users.post("/users/:id/avatar", async (c) => {
   const authUser = requireAuth(c);
   const id = parseUserId(c);
-  const isOwner = `${authUser.id}` === `${id}`;
+  const isOwner = `${authUser.userId}` === `${id}`;
   const canUpload = isOwner || hasPermission(c, "users.patch") || hasPermission(c, "users.uploadAvatar");
   if (!canUpload)
     throw new Error("ACCESS_DENIED");
@@ -2944,7 +2951,7 @@ users.post("/users/:id/avatar", async (c) => {
 users.delete("/users/:id/avatar", async (c) => {
   const authUser = requireAuth(c);
   const id = parseUserId(c);
-  const isOwner = `${authUser.id}` === `${id}`;
+  const isOwner = `${authUser.userId}` === `${id}`;
   const canUpload = isOwner || hasPermission(c, "users.patch") || hasPermission(c, "users.uploadAvatar");
   if (!canUpload)
     throw new Error("ACCESS_DENIED");

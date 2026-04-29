@@ -2,6 +2,12 @@ import { expect, test, describe } from 'bun:test';
 import { testClient } from 'the-api';
 import { login, migrationDir } from '../src';
 
+const decodeJwtPayload = (token: string): Record<string, unknown> => {
+  const payload = token.split('.')[1] || '';
+  const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+  return JSON.parse(Buffer.from(normalized, 'base64').toString('utf8')) as Record<string, unknown>;
+};
+
 const { theAPI, client, db } = await testClient({
   migrationDirs: [migrationDir],
   routings: [login],
@@ -80,6 +86,10 @@ describe('Login', () => {
     expect(typeof result.token).toEqual('string');
     expect(typeof result.refresh).toEqual('string');
     expect(result.token.split('.').length).toEqual(3);
+
+    const payload = decodeJwtPayload(result.token);
+    expect(payload.userId).toEqual(result.id);
+    expect(payload.id).toEqual(undefined);
   });
 
   test('POST /login', async () => {

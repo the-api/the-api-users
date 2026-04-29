@@ -1,10 +1,14 @@
 import type { Knex } from 'knex';
 import type { AppContext } from 'the-api-routings';
 export type AuthUser = {
-    id?: number | string;
+    userId?: number | string;
     role?: string | null;
     roles?: string[];
     [key: string]: unknown;
+};
+export type AuthenticatedUser = AuthUser & {
+    userId: number | string;
+    roles: string[];
 };
 export type UserRecord = {
     id: number;
@@ -54,7 +58,8 @@ export type VisibilityMap = Record<string, string[]>;
 export declare const getDb: (c: AppContext) => Knex;
 export declare const getDbWrite: (c: AppContext) => Knex;
 export declare const getRequestUser: (c: AppContext) => AuthUser;
-export declare const requireAuth: (c: AppContext) => AuthUser;
+export declare const getAuthUserId: (user: AuthUser | null | undefined) => number | string | undefined;
+export declare const requireAuth: (c: AppContext) => AuthenticatedUser;
 export declare const isUserIdentityVerified: (user: Partial<UserRecord> | AuthUser | null | undefined) => boolean;
 export declare const getUserRoles: (user: Partial<UserRecord> | AuthUser | null | undefined) => string[];
 export declare const hasPermission: (c: AppContext, permission: string, roles?: string[]) => boolean;

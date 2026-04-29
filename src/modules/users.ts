@@ -446,7 +446,7 @@ users.delete('/users/:id', async (c) => {
 users.post('/users/:id/avatar', async (c) => {
   const authUser = requireAuth(c);
   const id = parseUserId(c);
-  const isOwner = `${authUser.id}` === `${id}`;
+  const isOwner = `${authUser.userId}` === `${id}`;
   const canUpload = isOwner || hasPermission(c, 'users.patch') || hasPermission(c, 'users.uploadAvatar');
   if (!canUpload) throw new Error('ACCESS_DENIED');
 
@@ -475,7 +475,7 @@ users.post('/users/:id/avatar', async (c) => {
 users.delete('/users/:id/avatar', async (c) => {
   const authUser = requireAuth(c);
   const id = parseUserId(c);
-  const isOwner = `${authUser.id}` === `${id}`;
+  const isOwner = `${authUser.userId}` === `${id}`;
   const canUpload = isOwner || hasPermission(c, 'users.patch') || hasPermission(c, 'users.uploadAvatar');
   if (!canUpload) throw new Error('ACCESS_DENIED');
 
