@@ -53,6 +53,7 @@ import {
 const login = new Routings();
 
 const CODE_EXPIRES_IN = process.env.AUTH_CODE_EXPIRES_IN || '30m';
+const RECOVER_CODE_LENGTH = Number(process.env.AUTH_RECOVER_CODE_LENGTH || 12);
 const RECOVER_CODE_EXPIRES_IN = process.env.AUTH_RECOVER_CODE_EXPIRES_IN || CODE_EXPIRES_IN;
 const REFRESH_EXPIRES_IN = process.env.AUTH_REFRESH_EXPIRES_IN || '30d';
 const VERIFIED_ROLE = process.env.AUTH_VERIFIED_ROLE || process.env.AUTH_DEFAULT_ROLE || 'registered';
@@ -973,7 +974,7 @@ login.post('/login/forgot', async (c) => {
     return;
   }
 
-  const code = randomCode();
+  const code = randomCode(RECOVER_CODE_LENGTH);
   await setCode(c, user.id, {
     codeField: 'recoverCode',
     attemptsField: 'recoverCodeAttempts',
