@@ -1,0 +1,948 @@
+<!doctype html>
+    <html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>the-api-users documentation</title>
+    <meta
+      name="description"
+      content="Documentation for connecting the-api-users to the-api applications: PostgreSQL, migrations, login, users CRUD, OAuth, roles, errors, and FAQ."
+    >
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="topbar">
+      <div class="brand">
+        <a class="brand-mark" href="#overview" aria-label="the-api-users docs home">AUTH</a>
+        <div>
+          <strong>the-api-users</strong>
+          <span>Documentation</span>
+        </div>
+      </div>
+
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="sidebar">
+        Menu
+      </button>
+
+      <div class="topbar-actions">
+        <span class="version-pill">v0.8.1</span>
+        <a class="quiet-link" href="../AGENTS.md">AGENTS.md</a>
+        <a class="quiet-link" href="../README.md">README.md</a>
+      </div>
+    </header>
+
+    <div class="docs-shell">
+      <aside class="sidebar" id="sidebar">
+        <label class="search-label" for="doc-search">Search docs</label>
+        <input id="doc-search" class="search-input" type="search" placeholder="Search login, OAuth, users..." autocomplete="off">
+        <nav class="side-nav" aria-label="Main documentation">
+          <a href="#overview">Overview</a>
+          <a href="#prerequisites">Prerequisites</a>
+          <a href="#install">Install</a>
+          <a href="#schema">Tables</a>
+          <a href="#quickstart">Quickstart</a>
+          <a href="#environment">Environment</a>
+          <a href="#responses">Responses</a>
+          <a href="#auth">Auth endpoints</a>
+          <a href="#users">Users endpoints</a>
+          <a href="#permissions">Permissions</a>
+          <a href="#oauth">OAuth</a>
+          <a href="#app-api">App APIs</a>
+          <a href="#errors">Errors</a>
+          <a href="#faq">FAQ</a>
+          <a href="#testing">Testing</a>
+        </nav>
+      </aside>
+
+      <main id="main" class="content">
+        <section id="overview" class="hero" data-section>
+          <div class="hero-copy">
+            <p class="eyebrow">Users, login, OAuth, permissions</p>
+            <h1>Add production-ready user authentication to application APIs</h1>
+            <p class="lead">
+              `the-api-users` is a module for `the-api` that adds registration,
+              password login, refresh tokens, password recovery, users CRUD,
+              avatar upload, and OAuth provider linking. Use it as the standard
+              identity layer across different applications.
+            </p>
+            <div class="hero-actions">
+              <a class="button primary" href="#quickstart">Start building</a>
+              <a class="button secondary" href="#faq">FAQ examples</a>
+            </div>
+          </div>
+
+          <div class="flow-panel" aria-label="the-api-users setup flow">
+            <div class="flow-step">
+              <span>1</span>
+              <strong>Install</strong>
+              <small>Node/Bun packages</small>
+            </div>
+            <div class="flow-arrow">-&gt;</div>
+            <div class="flow-step">
+              <span>2</span>
+              <strong>Migrate</strong>
+              <small>PostgreSQL users</small>
+            </div>
+            <div class="flow-arrow">-&gt;</div>
+            <div class="flow-step">
+              <span>3</span>
+              <strong>Mount</strong>
+              <small>login + users</small>
+            </div>
+            <div class="flow-arrow">-&gt;</div>
+            <div class="flow-step">
+              <span>4</span>
+              <strong>Build</strong>
+              <small>App APIs on userId</small>
+            </div>
+          </div>
+        </section>
+
+        <section id="prerequisites" class="doc-section" data-section>
+          <div class="section-heading">
+            <p class="eyebrow">Before you start</p>
+            <h2>What the project needs</h2>
+          </div>
+          <div class="check-grid">
+            <div class="check-item">
+              <strong>Node.js or Bun</strong>
+              <p>The API can run on Node.js ESM or Bun.</p>
+            </div>
+            <div class="check-item">
+              <strong>`the-api` installed</strong>
+              <p>The module is mounted in a `the-api` application through routings.</p>
+            </div>
+            <div class="check-item">
+              <strong>PostgreSQL</strong>
+              <p>The `users` table and application domain tables live in Postgres.</p>
+            </div>
+            <div class="check-item">
+              <strong>Tables and migrations</strong>
+              <p>Create `users`, then create application tables that reference `users.id`.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="install" class="doc-section" data-section>
+          <div class="section-heading">
+            <p class="eyebrow">Install</p>
+            <h2>Packages and database</h2>
+          </div>
+          <div class="two-column">
+            <div>
+              <h3>Install packages</h3>
+              <pre><code class="language-bash">npm i the-api the-api-users the-api-roles
+
+bun add the-api the-api-users the-api-roles</code></pre>
+            </div>
+            <div>
+              <h3>Create local database</h3>
+              <pre><code class="language-bash">createdb app_api</code></pre>
+            </div>
+          </div>
+          <p class="note">
+            For a new project, add `migrationDir` from `the-api-users`.
+            For an existing `users` table, also use `migrationUpdateDir`
+            to add missing columns without recreating the table.
+          </p>
+        </section>
+
+        <section id="schema" class="doc-section" data-section>
+          <div class="section-heading">
+            <p class="eyebrow">PostgreSQL</p>
+            <h2>Tables for auth and examples</h2>
+          </div>
+          <p>
+            The `users` table is normally created by the module migration. The SQL
+            below is reference material: it shows the fields used by `login`,
+            `users`, verification codes, refresh tokens, and OAuth.
+          </p>
+          <div class="tabs" data-tabs>
+            <div class="tab-list" role="tablist" aria-label="Schema examples">
+              <button type="button" role="tab" aria-selected="true" data-tab="schema-users">users</button>
+              <button type="button" role="tab" aria-selected="false" data-tab="schema-app">projects/tasks</button>
+              <button type="button" role="tab" aria-selected="false" data-tab="schema-migration">migrationDirs</button>
+            </div>
+            <div class="tab-panel is-active" id="schema-users">
+              <pre><code class="language-sql">create table if not exists users (
+  id serial primary key,
+  "timeCreated" timestamp not null default now(),
+  "timeUpdated" timestamp,
+  "timeDeleted" timestamp,
+  "isBlocked" boolean not null default false,
+  "isDeleted" boolean not null default false,
+  login varchar(255) unique,
+  password varchar(255),
+  salt varchar(255),
+  "timePasswordChanged" timestamp,
+  email varchar(1024),
+  "isEmailVerified" boolean not null default false,
+  "isEmailInvalid" boolean not null default false,
+  phone varchar(255) unique,
+  "isPhoneVerified" boolean not null default false,
+  "isPhoneInvalid" boolean not null default false,
+  "fullName" varchar(1024),
+  "displayName" varchar(255),
+  avatar varchar(2048),
+  role varchar(128),
+  locale varchar(32),
+  timezone varchar(32),
+  refresh varchar(255),
+  "timeRefreshExpired" timestamp,
+  "oauthProviders" jsonb,
+  "registerCode" varchar(128),
+  "registerCodeAttempts" integer not null default 0,
+  "timeRegisterCodeExpired" timestamp,
+  "recoverCode" varchar(128),
+  "recoverCodeAttempts" integer not null default 0,
+  "timeRecoverCodeExpired" timestamp,
+  "phoneCode" varchar(32),
+  "phoneCodeAttempts" integer not null default 0,
+  "timePhoneCodeExpired" timestamp,
+  "phoneToChange" varchar(255),
+  "phoneChangeCode" varchar(32),
+  "phoneChangeCodeAttempts" integer not null default 0,
+  "timePhoneChangeCodeExpired" timestamp,
+  "emailToChange" varchar(1024),
+  "emailChangeCode" varchar(128),
+  "emailChangeCodeAttempts" integer not null default 0,
+  "timeEmailChangeCodeExpired" timestamp
+);</code></pre>
+            </div>
+            <div class="tab-panel" id="schema-app">
+              <pre><code class="language-sql">create table if not exists projects (
+  id serial primary key,
+  "ownerId" integer not null references users(id),
+  title varchar(255) not null,
+  status varchar(32) not null default 'active',
+  "timeCreated" timestamp not null default now(),
+  "timeUpdated" timestamp
+);
+
+create table if not exists tasks (
+  id serial primary key,
+  "projectId" integer not null references projects(id) on delete cascade,
+  "assigneeId" integer references users(id),
+  title varchar(255) not null,
+  done boolean not null default false,
+  "timeCreated" timestamp not null default now(),
+  "timeUpdated" timestamp
+);</code></pre>
+            </div>
+            <div class="tab-panel" id="schema-migration">
+              <pre><code class="language-ts">import { migrationDir, migrationUpdateDir } from 'the-api-users';
+
+const theAPI = new TheAPI({
+  migrationDirs: [
+    migrationDir,
+    migrationUpdateDir,
+  ],
+});</code></pre>
+            </div>
+          </div>
+        </section>
+
+        <section id="quickstart" class="doc-section" data-section>
+          <div class="section-heading">
+            <p class="eyebrow">Quickstart</p>
+            <h2>The smallest useful API with `login` and `users`</h2>
+          </div>
+          <pre><code class="language-ts">import { TheAPI, middlewares } from 'the-api';
+import Roles from 'the-api-roles';
+import { login, users, migrationDir } from 'the-api-users';
+
+const roles = new Roles({
+  root: ['*'],
+  admin: [
+    'users.get',
+    'users.post',
+    'users.patch',
+    'users.delete',
+    'users.viewEmail',
+    'users.viewPhone',
+    'users.viewRole',
+    'users.viewLocale',
+    'users.viewStatus',
+    'users.viewMeta',
+    'users.editProfile',
+    'users.editEmail',
+    'users.editPhone',
+    'users.editRole',
+    'users.editStatus',
+    'users.editVerification',
+    'users.uploadAvatar',
+  ],
+  registered: ['users.get'],
+  owner: [
+    'users.viewEmail',
+    'users.viewPhone',
+    'users.viewRole',
+    'users.viewLocale',
+    'users.viewMeta',
+  ],
+});
+
+const theAPI = new TheAPI({
+  roles,
+  migrationDirs: [migrationDir],
+  routings: [
+    middlewares.logs,
+    middlewares.errors,
+    middlewares.email,
+    middlewares.files,
+    users,
+    login,
+  ],
+});
+
+await theAPI.up();</code></pre>
+          <div class="request-response">
+            <div>
+              <h3>Request</h3>
+              <pre><code class="language-bash">curl -X POST "$API/login/register" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"john@example.com","password":"secret-123"}'</code></pre>
+            </div>
+            <div>
+              <h3>Response</h3>
+              <pre><code class="language-json">{
+  "result": {
+    "ok": true,
+    "email": "john@example.com",
+    "role": "unverified",
+    "refresh": "refresh-token...",
+    "emailConfirmationRequired": true
+  },
+  "error": false
+}</code></pre>
+            </div>
+          </div>
+        </section>
+
+        <section id="environment" class="doc-section" data-section>
+          <div class="section-heading">
+            <p class="eyebrow">Configuration</p>
+            <h2>Environment variables</h2>
+          </div>
+          <div class="two-column">
+            <div>
+              <h3>Core auth</h3>
+              <pre><code class="language-env">JWT_SECRET=change-me
+JWT_EXPIRES_IN=1h
+
+AUTH_DEFAULT_ROLE=registered
+AUTH_VERIFIED_ROLE=registered
+AUTH_UNVERIFIED_ROLE=unverified
+AUTH_REQUIRE_EMAIL_VERIFICATION=true
+AUTH_CODE_EXPIRES_IN=30m
+AUTH_RECOVER_CODE_LENGTH=36
+AUTH_RECOVER_CODE_EXPIRES_IN=30m
+AUTH_REFRESH_EXPIRES_IN=30d
+AUTH_MAX_CODE_ATTEMPTS=5
+AUTH_PASSWORD_HASH_ALGORITHM=scrypt</code></pre>
+            </div>
+            <div>
+              <h3>Database and files</h3>
+              <pre><code class="language-env">DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_DATABASE=app_api
+
+DB_WRITE_HOST=localhost
+DB_WRITE_PORT=5432
+DB_WRITE_USER=postgres
+DB_WRITE_PASSWORD=postgres
+DB_WRITE_DATABASE=app_api
+
+FILES_FOLDER=public/files</code></pre>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Variable</th><th>Default</th><th>Meaning</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>AUTH_REQUIRE_EMAIL_VERIFICATION</code></td><td><code>false</code> unless set to <code>true</code></td><td>When true, registration returns refresh but no JWT until e-mail confirmation.</td></tr>
+                <tr><td><code>AUTH_PASSWORD_HASH_ALGORITHM</code></td><td><code>scrypt</code></td><td>Use <code>sha256</code> only for legacy hashes.</td></tr>
+                <tr><td><code>AUTH_SCRYPT_N/R/P/MAXMEM</code></td><td><code>16384/8/1/33554432</code></td><td>Scrypt parameters for new password hashes.</td></tr>
+                <tr><td><code>AUTH_MAX_CODE_ATTEMPTS</code></td><td><code>5</code></td><td>Maximum failed attempts for confirmation/recovery codes.</td></tr>
+                <tr><td><code>AUTH_REFRESH_EXPIRES_IN</code></td><td><code>30d</code></td><td>Refresh token lifetime.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="responses" class="doc-section" data-section>
+          <div class="section-heading">
+            <p class="eyebrow">Envelope</p>
+            <h2>Response format</h2>
+          </div>
+          <div class="request-response">
+            <div>
+              <h3>Success envelope</h3>
+              <pre><code class="language-json">{
+  "result": {},
+  "meta": {},
+  "relations": {},
+  "error": false,
+  "requestTime": 6,
+  "serverTime": "2026-03-14T12:00:00.000Z"
+}</code></pre>
+            </div>
+            <div>
+              <h3>Auth result</h3>
+              <pre><code class="language-json">{
+  "result": {
+    "id": 1,
+    "email": "john@example.com",
+    "phone": null,
+    "fullName": "John Doe",
+    "role": "registered",
+    "roles": ["registered"],
+    "avatar": null,
+    "locale": "en",
+    "timezone": "UTC",
+    "isEmailVerified": true,
+    "isPhoneVerified": false,
+    "oauthServices": ["google"],
+    "token": "jwt...",
+    "refresh": "refresh-token..."
+  },
+  "error": false
+}</code></pre>
+            </div>
+          </div>
+          <p>
+            Errors also live in `result`. Clients should branch on
+            <code>result.name</code>, for example <code>EMAIL_NOT_CONFIRMED</code>,
+            <code>ACCESS_DENIED</code>, or <code>OAUTH_INVALID_TOKEN</code>.
+          </p>
+        </section>
+
+        <section id="auth" class="doc-section" data-section>
+          <div class="section-heading">
+            <p class="eyebrow">Login module</p>
+            <h2>Auth endpoints</h2>
+          </div>
+          <div class="endpoint-list">
+            <div class="endpoint"><span class="method post">POST</span><code>/login/register</code><p>Create password user.</p></div>
+            <div class="endpoint"><span class="method post">POST</span><code>/login/register/confirm</code><p>Confirm registration e-mail.</p></div>
+            <div class="endpoint"><span class="method post">POST</span><code>/login/register/resend</code><p>Send a fresh registration code.</p></div>
+            <div class="endpoint"><span class="method post">POST</span><code>/login</code><p>Password login by e-mail or login.</p></div>
+            <div class="endpoint"><span class="method post">POST</span><code>/login/refresh</code><p>Issue a fresh JWT by refresh token.</p></div>
+            <div class="endpoint"><span class="method get">GET</span><code>/login/refresh</code><p>Refresh through query string.</p></div>
+            <div class="endpoint"><span class="method post">POST</span><code>/login/forgot</code><p>Send password recovery code.</p></div>
+            <div class="endpoint"><span class="method post">POST</span><code>/login/restore</code><p>Set new password by recovery code.</p></div>
+            <div class="endpoint"><span class="method patch">PATCH</span><code>/login</code><p>Edit own profile, password, e-mail, phone.</p></div>
+            <div class="endpoint"><span class="method post">POST</span><code>/login/email</code><p>Confirm e-mail change.</p></div>
+            <div class="endpoint"><span class="method post">POST</span><code>/login/phone</code><p>Confirm phone or phone change.</p></div>
+            <div class="endpoint"><span class="method get">GET</span><code>/login/me</code><p>Read current user.</p></div>
+            <div class="endpoint"><span class="method get">GET</span><code>/login/externals</code><p>List linked OAuth providers.</p></div>
+          </div>
+          <div class="callout">
+            <strong>Do not reimplement auth routes in applications.</strong>
+            Use this routing as the identity layer, then build domain APIs on top
+            of `c.var.user.userId`.
+          </div>
+        </section>
+
+        <section id="users" class="doc-section" data-section>
+          <div class="section-heading">
+            <p class="eyebrow">Users module</p>
+            <h2>Users CRUD and avatar</h2>
+          </div>
+          <div class="endpoint-list">
+            <div class="endpoint"><span class="method get">GET</span><code>/users</code><p>List users with field visibility rules.</p></div>
+            <div class="endpoint"><span class="method get">GET</span><code>/users/:id</code><p>Read one user; owner gets owner visibility.</p></div>
+            <div class="endpoint"><span class="method post">POST</span><code>/users</code><p>Admin-style user creation with password hashing.</p></div>
+            <div class="endpoint"><span class="method patch">PATCH</span><code>/users/:id</code><p>Patch allowed fields based on permissions.</p></div>
+            <div class="endpoint"><span class="method delete">DELETE</span><code>/users/:id</code><p>Soft-delete and invalidate refresh token.</p></div>
+            <div class="endpoint"><span class="method post">POST</span><code>/users/:id/avatar</code><p>Upload or replace avatar.</p></div>
+            <div class="endpoint"><span class="method delete">DELETE</span><code>/users/:id/avatar</code><p>Delete avatar.</p></div>
+          </div>
+          <p>
+            Do not insert users directly from business code: `POST /users`
+            normalizes e-mail/phone, hashes the password, and generates salt, refresh, and
+            verification codes.
+          </p>
+        </section>
+
+        <section id="permissions" class="doc-section" data-section>
+          <div class="section-heading">
+            <p class="eyebrow">Roles</p>
+            <h2>Route and field permissions</h2>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Permission</th><th>Meaning</th></tr></thead>
+              <tbody>
+                <tr><td><code>users.get</code>, <code>users.post</code>, <code>users.patch</code>, <code>users.delete</code></td><td>Route-level access for users CRUD.</td></tr>
+                <tr><td><code>users.viewEmail</code>, <code>users.viewPhone</code>, <code>users.viewRole</code></td><td>Expose private identity and role fields.</td></tr>
+                <tr><td><code>users.viewLocale</code>, <code>users.viewStatus</code>, <code>users.viewMeta</code></td><td>Expose locale/timezone, block/delete flags, timestamps.</td></tr>
+                <tr><td><code>users.editProfile</code>, <code>users.editEmail</code>, <code>users.editPhone</code></td><td>Allow edits to profile, e-mail and phone fields.</td></tr>
+                <tr><td><code>users.editRole</code>, <code>users.editStatus</code>, <code>users.editVerification</code></td><td>Admin-level role, status and verification changes.</td></tr>
+                <tr><td><code>users.uploadAvatar</code></td><td>Allow avatar upload for non-owner operations.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <pre><code class="language-ts">const roles = new Roles({
+  root: ['*'],
+  admin: [
+    'users.get',
+    'users.post',
+    'users.patch',
+    'users.delete',
+    'users.viewEmail',
+    'users.viewPhone',
+    'users.viewRole',
+    'users.viewLocale',
+    'users.viewStatus',
+    'users.viewMeta',
+    'users.editProfile',
+    'users.editEmail',
+    'users.editPhone',
+    'users.editRole',
+    'users.editStatus',
+    'users.editVerification',
+    'users.uploadAvatar',
+  ],
+  registered: ['users.get'],
+  owner: [
+    'users.viewEmail',
+    'users.viewPhone',
+    'users.viewRole',
+    'users.viewLocale',
+    'users.viewMeta',
+  ],
+});</code></pre>
+          <p>
+            Hidden fields never leak through users CRUD: `password`, `salt`,
+            `refresh`, verification codes, pending e-mail/phone fields and
+            `oauthProviders`.
+          </p>
+        </section>
+
+        <section id="oauth" class="doc-section" data-section>
+          <div class="section-heading">
+            <p class="eyebrow">External login</p>
+            <h2>OAuth providers</h2>
+          </div>
+          <div class="endpoint-list">
+            <div class="endpoint"><span class="method get">GET</span><code>/login/{service}</code><p>Redirect to provider authorization page.</p></div>
+            <div class="endpoint"><span class="method post">POST</span><code>/login/{service}</code><p>Accept provider `code`, `accessToken` or `idToken`.</p></div>
+            <div class="endpoint"><span class="method delete">DELETE</span><code>/login/{service}</code><p>Unlink provider from current user.</p></div>
+          </div>
+          <p>
+            Supported services: `apple`, `facebook`, `github`, `google`,
+            `linkedin`, `microsoft`, `twitter`.
+          </p>
+          <div class="tabs" data-tabs>
+            <div class="tab-list" role="tablist" aria-label="OAuth examples">
+              <button type="button" role="tab" aria-selected="true" data-tab="oauth-env">Env</button>
+              <button type="button" role="tab" aria-selected="false" data-tab="oauth-browser">Browser flow</button>
+              <button type="button" role="tab" aria-selected="false" data-tab="oauth-token">Token flow</button>
+              <button type="button" role="tab" aria-selected="false" data-tab="oauth-link">Link/unlink</button>
+            </div>
+            <div class="tab-panel is-active" id="oauth-env">
+              <pre><code class="language-env">AUTH_GOOGLE_CLIENT_ID=
+AUTH_GOOGLE_CLIENT_SECRET=
+AUTH_GOOGLE_REDIRECT_URI=
+AUTH_GOOGLE_SCOPE=openid email profile
+
+AUTH_GITHUB_CLIENT_ID=
+AUTH_GITHUB_CLIENT_SECRET=
+AUTH_GITHUB_REDIRECT_URI=
+AUTH_GITHUB_SCOPE=read:user user:email
+
+AUTH_APPLE_CLIENT_ID=
+AUTH_APPLE_CLIENT_SECRET=
+AUTH_APPLE_TEAM_ID=
+AUTH_APPLE_KEY_ID=
+AUTH_APPLE_PRIVATE_KEY=
+AUTH_APPLE_REDIRECT_URI=
+AUTH_APPLE_SCOPE=name email</code></pre>
+            </div>
+            <div class="tab-panel" id="oauth-browser">
+              <pre><code class="language-bash">curl -i "$API/login/google"</code></pre>
+              <pre><code class="language-bash">curl -X POST "$API/login/google" \
+  -H "Content-Type: application/json" \
+  -d '{"code":"provider-auth-code","state":"provider-state"}'</code></pre>
+            </div>
+            <div class="tab-panel" id="oauth-token">
+              <pre><code class="language-bash">curl -X POST "$API/login/github" \
+  -H "Content-Type: application/json" \
+  -d '{"accessToken":"github-access-token"}'</code></pre>
+            </div>
+            <div class="tab-panel" id="oauth-link">
+              <pre><code class="language-bash">curl -X POST "$API/login/github" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"accessToken":"github-access-token"}'
+
+curl -X DELETE "$API/login/github" \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+            </div>
+          </div>
+          <div class="callout">
+            <strong>Provider access tokens are not stored.</strong>
+            `users.oauthProviders` stores provider identity metadata, not OAuth
+            access tokens.
+          </div>
+        </section>
+
+        <section id="app-api" class="doc-section" data-section>
+          <div class="section-heading">
+            <p class="eyebrow">Application APIs</p>
+            <h2>Build domain routes on `users.id`</h2>
+          </div>
+          <p>
+            In domain tables, use a foreign key to `users.id`. For owner-only
+            resources, take the owner id from JWT, not from the body.
+          </p>
+          <div class="request-response">
+            <div>
+              <h3>Request</h3>
+              <pre><code class="language-bash">curl -X POST "$API/projects" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"First project"}'</code></pre>
+            </div>
+            <div>
+              <h3>Expected response</h3>
+              <pre><code class="language-json">{
+  "result": {
+    "id": 1,
+    "ownerId": 1,
+    "title": "First project",
+    "status": "active"
+  },
+  "error": false
+}</code></pre>
+            </div>
+          </div>
+          <pre><code class="language-ts">const userId = c.var.user.userId;</code></pre>
+          <div class="check-grid">
+            <div class="check-item">
+              <strong>registered</strong>
+              <p>Usually sees only own records.</p>
+            </div>
+            <div class="check-item">
+              <strong>admin</strong>
+              <p>Can be granted access to all domain records.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="errors" class="doc-section" data-section>
+          <div class="section-heading">
+            <p class="eyebrow">Errors</p>
+            <h2>Auth and users error names</h2>
+          </div>
+          <div class="request-response">
+            <div>
+              <h3>Error response</h3>
+              <pre><code class="language-json">{
+  "result": {
+    "name": "EMAIL_NOT_CONFIRMED",
+    "message": "EMAIL_NOT_CONFIRMED"
+  },
+  "error": true
+}</code></pre>
+            </div>
+            <div>
+              <h3>Client branch</h3>
+              <pre><code class="language-ts">if (response.error && response.result.name === 'EMAIL_NOT_CONFIRMED') {
+  showEmailConfirmationScreen();
+}</code></pre>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Group</th><th>Names</th></tr></thead>
+              <tbody>
+                <tr><td>Identity</td><td><code>USER_NOT_FOUND</code>, <code>USER_ACCESS_DENIED</code>, <code>NO_TOKEN</code>, <code>WRONG_PASSWORD</code></td></tr>
+                <tr><td>Uniqueness</td><td><code>EMAIL_EXISTS</code>, <code>PHONE_EXISTS</code>, <code>LOGIN_EXISTS</code></td></tr>
+                <tr><td>Validation</td><td><code>INVALID_EMAIL</code>, <code>INVALID_PHONE</code>, <code>PASSWORD_REQUIRED</code>, <code>LOGIN_OR_EMAIL_REQUIRED</code></td></tr>
+                <tr><td>Codes</td><td><code>EMAIL_NOT_CONFIRMED</code>, <code>INVALID_OR_EXPIRED_CODE</code>, <code>WRONG_CODE</code>, <code>NOTHING_TO_CONFIRM</code>, <code>EMAIL_ALREADY_CONFIRMED</code></td></tr>
+                <tr><td>OAuth</td><td><code>OAUTH_SERVICE_NOT_SUPPORTED</code>, <code>OAUTH_TOKEN_REQUIRED</code>, <code>OAUTH_INVALID_TOKEN</code>, <code>OAUTH_INVALID_STATE</code>, <code>OAUTH_CONFLICT</code>, <code>OAUTH_LAST_LOGIN_METHOD</code></td></tr>
+                <tr><td>Users</td><td><code>AVATAR_REQUIRED</code>, <code>ACCESS_DENIED</code>, <code>NOT_FOUND</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="faq" class="doc-section" data-section>
+          <div class="section-heading">
+            <p class="eyebrow">FAQ</p>
+            <h2>Request and response examples</h2>
+          </div>
+
+          <h3>How do I confirm e-mail after registration?</h3>
+          <div class="request-response">
+            <div>
+              <pre><code class="language-bash">curl -X POST "$API/login/register/confirm" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"john@example.com","code":"123456"}'</code></pre>
+            </div>
+            <div>
+              <pre><code class="language-json">{
+  "result": {
+    "id": 1,
+    "email": "john@example.com",
+    "role": "registered",
+    "roles": ["registered"],
+    "isEmailVerified": true,
+    "token": "jwt...",
+    "refresh": "refresh-token..."
+  },
+  "error": false
+}</code></pre>
+            </div>
+          </div>
+
+          <h3>How do I log in and refresh JWT?</h3>
+          <div class="request-response">
+            <div>
+              <pre><code class="language-bash">curl -X POST "$API/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"john@example.com","password":"secret-123"}'
+
+curl -X POST "$API/login/refresh" \
+  -H "Content-Type: application/json" \
+  -d '{"refresh":"refresh-token..."}'</code></pre>
+            </div>
+            <div>
+              <pre><code class="language-json">{
+  "result": {
+    "id": 1,
+    "email": "john@example.com",
+    "role": "registered",
+    "roles": ["registered"],
+    "token": "jwt...",
+    "refresh": "refresh-token..."
+  },
+  "error": false
+}</code></pre>
+            </div>
+          </div>
+
+          <h3>How do I get the current user?</h3>
+          <div class="request-response">
+            <div>
+              <pre><code class="language-bash">curl "$API/login/me" \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+            </div>
+            <div>
+              <pre><code class="language-json">{
+  "result": {
+    "id": 1,
+    "email": "john@example.com",
+    "phone": null,
+    "fullName": "John Doe",
+    "role": "registered",
+    "roles": ["registered"],
+    "isEmailVerified": true
+  },
+  "error": false
+}</code></pre>
+            </div>
+          </div>
+
+          <h3>How do I change profile, password, e-mail, or phone?</h3>
+          <div class="tabs" data-tabs>
+            <div class="tab-list" role="tablist" aria-label="Profile changes">
+              <button type="button" role="tab" aria-selected="true" data-tab="faq-profile">Profile</button>
+              <button type="button" role="tab" aria-selected="false" data-tab="faq-password">Password</button>
+              <button type="button" role="tab" aria-selected="false" data-tab="faq-email">E-mail</button>
+              <button type="button" role="tab" aria-selected="false" data-tab="faq-phone">Phone</button>
+            </div>
+            <div class="tab-panel is-active" id="faq-profile">
+              <pre><code class="language-bash">curl -X PATCH "$API/login" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"fullName":"John Updated","locale":"uk","timezone":"Europe/Kyiv"}'</code></pre>
+            </div>
+            <div class="tab-panel" id="faq-password">
+              <pre><code class="language-bash">curl -X PATCH "$API/login" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"password":"secret-123","newPassword":"new-secret-456"}'</code></pre>
+            </div>
+            <div class="tab-panel" id="faq-email">
+              <pre><code class="language-bash">curl -X PATCH "$API/login" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"john.new@example.com"}'
+
+curl -X POST "$API/login/email" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"code":"123456"}'</code></pre>
+            </div>
+            <div class="tab-panel" id="faq-phone">
+              <pre><code class="language-bash">curl -X PATCH "$API/login" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"+15550000001"}'
+
+curl -X POST "$API/login/phone" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"code":"123456"}'</code></pre>
+            </div>
+          </div>
+          <pre><code class="language-json">{
+  "result": {
+    "ok": true,
+    "passwordChanged": false,
+    "emailChangeRequested": true,
+    "phoneChangeRequested": false
+  },
+  "error": false
+}</code></pre>
+
+          <h3>How do I recover a password?</h3>
+          <div class="request-response">
+            <div>
+              <pre><code class="language-bash">curl -X POST "$API/login/forgot" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"john@example.com"}'
+
+curl -X POST "$API/login/restore" \
+  -H "Content-Type: application/json" \
+  -d '{"code":"recovery-code","password":"new-secret-456"}'</code></pre>
+            </div>
+            <div>
+              <pre><code class="language-json">{
+  "result": {
+    "ok": true
+  },
+  "error": false
+}</code></pre>
+            </div>
+          </div>
+
+          <h3>How does an admin create, update, and delete users?</h3>
+          <div class="request-response">
+            <div>
+              <pre><code class="language-bash">curl -X POST "$API/users" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user-1@example.com","password":"pass-1","fullName":"User One"}'
+
+curl -X PATCH "$API/users/2" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user-1-updated@example.com","isEmailVerified":false}'
+
+curl -X DELETE "$API/users/2" \
+  -H "Authorization: Bearer $ADMIN_TOKEN"</code></pre>
+            </div>
+            <div>
+              <pre><code class="language-json">{
+  "result": {
+    "id": 2,
+    "email": "user-1@example.com",
+    "fullName": "User One",
+    "role": "unverified",
+    "isEmailVerified": false
+  },
+  "error": false
+}</code></pre>
+            </div>
+          </div>
+
+          <h3>How do I upload an avatar?</h3>
+          <div class="request-response">
+            <div>
+              <pre><code class="language-bash">curl -X POST "$API/users/1/avatar" \
+  -H "Authorization: Bearer $TOKEN" \
+  -F "avatar=@avatar.png"</code></pre>
+            </div>
+            <div>
+              <pre><code class="language-json">{
+  "result": {
+    "id": 1,
+    "avatar": "users/1/avatar/file-name.png"
+  },
+  "error": false
+}</code></pre>
+            </div>
+          </div>
+
+          <h3>How do I list and unlink OAuth providers?</h3>
+          <div class="request-response">
+            <div>
+              <pre><code class="language-bash">curl "$API/login/externals" \
+  -H "Authorization: Bearer $TOKEN"
+
+curl -X DELETE "$API/login/github" \
+  -H "Authorization: Bearer $TOKEN"</code></pre>
+            </div>
+            <div>
+              <pre><code class="language-json">{
+  "result": [
+    {
+      "service": "google",
+      "email": "john@example.com",
+      "phone": null,
+      "fullName": "John Doe",
+      "avatar": "https://cdn.example.com/avatar.png",
+      "linkedAt": "2026-03-14T12:00:00.000Z",
+      "updatedAt": "2026-03-14T12:00:00.000Z"
+    }
+  ],
+  "error": false
+}</code></pre>
+            </div>
+          </div>
+
+          <h3>What is returned without a token or without permissions?</h3>
+          <div class="request-response">
+            <div>
+              <pre><code class="language-bash">curl "$API/login/me"
+
+curl -X POST "$API/users" \
+  -H "Authorization: Bearer $REGISTERED_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"x@example.com","password":"pass"}'</code></pre>
+            </div>
+            <div>
+              <pre><code class="language-json">{
+  "result": {
+    "name": "NO_TOKEN",
+    "message": "NO_TOKEN"
+  },
+  "error": true
+}</code></pre>
+            </div>
+          </div>
+        </section>
+
+        <section id="testing" class="doc-section" data-section>
+          <div class="section-heading">
+            <p class="eyebrow">Project work</p>
+            <h2>Testing and building</h2>
+          </div>
+          <pre><code class="language-bash">bun run test
+bun run build</code></pre>
+          <p>
+            Tests cover password hashing, login flows, users CRUD, avatars, and
+            OAuth. Build output is written to `dist/`; edit source files in `src/`.
+          </p>
+        </section>
+      </main>
+
+      <aside class="toc" aria-label="On this page">
+        <p>On this page</p>
+        <nav id="toc-links"></nav>
+      </aside>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
