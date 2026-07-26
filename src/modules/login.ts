@@ -1159,6 +1159,7 @@ const confirmEmailChange = async (c: AppContext) => {
       emailChangeCodeAttempts: 0,
       timeEmailChangeCodeExpired: null,
       isEmailVerified: true,
+      isEmailInvalid: false,
       role: getRoleAfterVerifiedIdentity(user.role),
       timeUpdated: dbWrite.fn.now(),
     });
@@ -1169,6 +1170,7 @@ const confirmEmailChange = async (c: AppContext) => {
     email: user.emailToChange,
     emailToChange: null,
     isEmailVerified: true,
+    isEmailInvalid: false,
   });
 };
 

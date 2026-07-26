@@ -204,13 +204,21 @@ describe('Login', () => {
       .where({ email: authUser.email })
       .first();
 
+    await db('users')
+      .where({ id: user.id })
+      .update({ isEmailInvalid: true });
+
     const { result } = await client.post('/login/email', { code: user.emailChangeCode }, authToken);
+    const updatedUser = await db('users')
+      .where({ id: user.id })
+      .first();
 
     authToken = result.token;
     authRefresh = result.refresh;
 
     expect(result.email).toEqual(authUpdatedEmail);
     expect(result.role).toEqual('registered');
+    expect(updatedUser.isEmailInvalid).toEqual(false);
   });
 
   test('confirming email upgrades only unverified role', async () => {

@@ -1490,6 +1490,7 @@ var USER_SELF_EDITABLE_FIELDS = ["fullName", "locale", "timezone"];
 // src/modules/login.ts
 var login = new Routings;
 var CODE_EXPIRES_IN = process.env.AUTH_CODE_EXPIRES_IN || "30m";
+var RECOVER_CODE_LENGTH = Number(process.env.AUTH_RECOVER_CODE_LENGTH || 12);
 var RECOVER_CODE_EXPIRES_IN = process.env.AUTH_RECOVER_CODE_EXPIRES_IN || CODE_EXPIRES_IN;
 var REFRESH_EXPIRES_IN = process.env.AUTH_REFRESH_EXPIRES_IN || "30d";
 var VERIFIED_ROLE2 = process.env.AUTH_VERIFIED_ROLE || process.env.AUTH_DEFAULT_ROLE || "registered";
@@ -2234,7 +2235,7 @@ login.post("/login/forgot", async (c) => {
     c.set("result", { ok: true });
     return;
   }
-  const code = randomCode();
+  const code = randomCode(RECOVER_CODE_LENGTH);
   await setCode(c, user.id, {
     codeField: "recoverCode",
     attemptsField: "recoverCodeAttempts",
@@ -2389,6 +2390,7 @@ var confirmEmailChange = async (c) => {
     emailChangeCodeAttempts: 0,
     timeEmailChangeCodeExpired: null,
     isEmailVerified: true,
+    isEmailInvalid: false,
     role: getRoleAfterVerifiedIdentity(user.role),
     timeUpdated: dbWrite.fn.now()
   });
@@ -2397,7 +2399,8 @@ var confirmEmailChange = async (c) => {
     role: getRoleAfterVerifiedIdentity(user.role),
     email: user.emailToChange,
     emailToChange: null,
-    isEmailVerified: true
+    isEmailVerified: true,
+    isEmailInvalid: false
   });
 };
 login.post("/login/email", confirmEmailChange);
