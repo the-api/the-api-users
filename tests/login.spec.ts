@@ -104,6 +104,25 @@ describe('Login', () => {
     expect(result.refresh.length > 10).toEqual(true);
   });
 
+  test('POST /login denies a banned user', async () => {
+    await db('users').where({ email: authUser.email }).update({
+      isBanned: true,
+      bannedCode: 'RULES_VIOLATION',
+      bannedAt: db.fn.now(),
+    });
+
+    const { result } = await client.post('/login', authUser);
+    expect(result.name).toEqual('USER_ACCESS_DENIED');
+
+    await db('users').where({ email: authUser.email }).update({
+      isBanned: false,
+      bannedCode: null,
+      bannedReason: null,
+      bannedAt: null,
+      bannedUntil: null,
+    });
+  });
+
   test('POST /login/refresh', async () => {
     const { result } = await client.post('/login/refresh', { refresh: authRefresh });
 

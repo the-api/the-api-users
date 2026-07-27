@@ -21,6 +21,7 @@ const roles = {
     'users.viewRole',
     'users.viewLocale',
     'users.viewStatus',
+    'users.viewBanDetails',
     'users.viewMeta',
     'users.editProfile',
     'users.editEmail',
@@ -123,6 +124,65 @@ describe('Users', () => {
     expect(result.email).toEqual('owner-user@test.local');
     expect(result.phone).toEqual('+15551111111');
     expect(result.password).toEqual(undefined);
+  });
+
+  test('ban details are visible only to an admin or the user themself', async () => {
+    const bannedAt = new Date('2026-07-27T12:00:00.000Z');
+    const bannedUntil = new Date('2026-08-10T00:00:00.000Z');
+    const ban = {
+      isBanned: true,
+      bannedCode: 'SPAM',
+      bannedReason: 'Spam example',
+      bannedAt,
+      bannedUntil,
+    };
+    await db('users').where({ id: ownerUserId }).update(ban);
+    await db('users').where({ id: userId }).update(ban);
+
+    const { result: ownerResult } = await client.get(`/users/${ownerUserId}`, tokens.registered);
+    const { result: adminResult } = await client.get(`/users/${userId}`, tokens.admin);
+    const { result: publicResult } = await client.get('/users?_sort=id', tokens.registered);
+    const publicUser = publicResult.find((item: any) => item.id === userId);
+
+    expect(ownerResult.bannedCode).toEqual('SPAM');
+    expect(adminResult.bannedReason).toEqual('Spam example');
+    expect(publicUser.isBanned).toEqual(true);
+    expect(publicUser.bannedCode).toEqual(undefined);
+    expect(publicUser.bannedReason).toEqual(undefined);
+
+    await db('users').whereIn('id', [ownerUserId, userId]).update({
+      isBanned: false,
+      bannedCode: null,
+      bannedReason: null,
+      bannedAt: null,
+      bannedUntil: null,
+    });
+  });
+
+  test('PATCH /users/:id clears all ban details when an admin unbans', async () => {
+    const { result: banned } = await client.patch(`/users/${userId}`, {
+      isBanned: true,
+      bannedCode: 'SANCTIONS',
+      bannedReason: 'Compliance restriction',
+      bannedUntil: '2026-08-10T00:00:00.000Z',
+    }, tokens.admin);
+
+    expect(banned.isBanned).toEqual(true);
+    expect(banned.bannedCode).toEqual('SANCTIONS');
+    expect(banned.bannedReason).toEqual('Compliance restriction');
+    expect(new Date(banned.bannedUntil).toISOString()).toEqual('2026-08-10T00:00:00.000Z');
+
+    const { result: unbanned } = await client.patch(
+      `/users/${userId}`,
+      { isBanned: false },
+      tokens.admin,
+    );
+
+    expect(unbanned.isBanned).toEqual(false);
+    expect(unbanned.bannedCode).toEqual(null);
+    expect(unbanned.bannedReason).toEqual(null);
+    expect(unbanned.bannedAt).toEqual(null);
+    expect(unbanned.bannedUntil).toEqual(null);
   });
 
   test('GET /users/:id by generated token uses userId payload for owner checks', async () => {

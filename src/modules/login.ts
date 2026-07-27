@@ -264,7 +264,7 @@ const findUserByRecoverCode = async (c: AppContext, code: string): Promise<UserR
 
 const assertUserActive = (user: UserRecord | undefined): UserRecord => {
   if (!user || user.isDeleted) throw new Error('USER_NOT_FOUND');
-  if (user.isBlocked) throw new Error('USER_ACCESS_DENIED');
+  if (user.isBanned) throw new Error('USER_ACCESS_DENIED');
   return user;
 };
 
@@ -589,7 +589,7 @@ const createOAuthUser = async (c: AppContext, identity: OAuthIdentity): Promise<
   const locale = identity.locale || null;
   const payload: Record<string, unknown> = {
     timeCreated: dbWrite.fn.now(),
-    isBlocked: false,
+    isBanned: false,
     isDeleted: false,
     login: loginName,
     isEmailVerified: !!email,

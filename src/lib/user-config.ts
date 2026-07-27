@@ -23,6 +23,10 @@ export const USER_HIDDEN_FIELDS = [
   'oauthProviders',
   'email',
   'phone',
+  'bannedCode',
+  'bannedReason',
+  'bannedAt',
+  'bannedUntil',
 ];
 
 export const USER_VISIBLE_FOR = {
@@ -30,7 +34,8 @@ export const USER_VISIBLE_FOR = {
   'users.viewPhone': ['phone', 'isPhoneVerified'],
   'users.viewRole': ['role'],
   'users.viewLocale': ['locale', 'timezone'],
-  'users.viewStatus': ['isBlocked', 'isDeleted', 'isEmailInvalid', 'isPhoneInvalid'],
+  'users.viewStatus': ['isBanned', 'isDeleted', 'isEmailInvalid', 'isPhoneInvalid'],
+  'users.viewBanDetails': ['bannedCode', 'bannedReason', 'bannedAt', 'bannedUntil'],
   'users.viewMeta': ['timeCreated', 'timeUpdated', 'timeDeleted'],
 };
 
@@ -39,6 +44,7 @@ export const USER_OWNER_PERMISSIONS = [
   'users.viewPhone',
   'users.viewRole',
   'users.viewLocale',
+  'users.viewBanDetails',
   'users.viewMeta',
 ];
 
@@ -47,7 +53,16 @@ export const USER_EDITABLE_FOR = {
   'users.editEmail': ['email'],
   'users.editPhone': ['phone'],
   'users.editRole': ['role'],
-  'users.editStatus': ['isBlocked', 'isDeleted', 'isEmailInvalid', 'isPhoneInvalid'],
+  'users.editStatus': [
+    'isBanned',
+    'bannedCode',
+    'bannedReason',
+    'bannedAt',
+    'bannedUntil',
+    'isDeleted',
+    'isEmailInvalid',
+    'isPhoneInvalid',
+  ],
   'users.editVerification': ['isEmailVerified', 'isPhoneVerified'],
 };
 

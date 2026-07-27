@@ -75,6 +75,11 @@ const USERS_ERRORS = {
     status: 400,
     description: 'Avatar file is required',
   },
+  INVALID_BANNED_DATE: {
+    code: 209,
+    status: 400,
+    description: 'Ban date is invalid',
+  },
 } as const;
 
 const getRoleAfterEmailConfirmation = (role: string | null | undefined): string =>
@@ -120,6 +125,14 @@ const trimString = (value: unknown): string | null => {
   return result || null;
 };
 
+const parseBanDate = (value: unknown): Date | null => {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' && !(value instanceof Date)) throw new Error('INVALID_BANNED_DATE');
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error('INVALID_BANNED_DATE');
+  return date;
+};
+
 const getBodyObject = (c: AppContext): Record<string, unknown> => (
   c.var.body && typeof c.var.body === 'object' && !Array.isArray(c.var.body)
     ? (c.var.body as Record<string, unknown>)
@@ -143,6 +156,17 @@ const usersCrudConfig: CrudBuilderOptionsType = {
         fullName: { type: 'string' },
         locale: { type: 'string' },
         timezone: { type: 'string' },
+        role: { type: 'string' },
+        isBanned: { type: 'boolean' },
+        bannedCode: { type: 'string' },
+        bannedReason: { type: 'string' },
+        bannedAt: { type: 'string' },
+        bannedUntil: { type: 'string' },
+        isDeleted: { type: 'boolean' },
+        isEmailInvalid: { type: 'boolean' },
+        isPhoneInvalid: { type: 'boolean' },
+        isEmailVerified: { type: 'boolean' },
+        isPhoneVerified: { type: 'boolean' },
       },
       patch: {
         email: { type: 'string' },
@@ -151,7 +175,11 @@ const usersCrudConfig: CrudBuilderOptionsType = {
         locale: { type: 'string' },
         timezone: { type: 'string' },
         role: { type: 'string' },
-        isBlocked: { type: 'boolean' },
+        isBanned: { type: 'boolean' },
+        bannedCode: { type: 'string' },
+        bannedReason: { type: 'string' },
+        bannedAt: { type: 'string' },
+        bannedUntil: { type: 'string' },
         isDeleted: { type: 'boolean' },
         isEmailInvalid: { type: 'boolean' },
         isPhoneInvalid: { type: 'boolean' },
@@ -291,7 +319,13 @@ users.post('/users', async (c) => {
     locale: trimString(body.locale),
     timezone: trimString(body.timezone),
     role: trimString(body.role) || (body.isEmailVerified === true ? VERIFIED_ROLE : UNVERIFIED_ROLE),
-    isBlocked: body.isBlocked === true,
+    isBanned: body.isBanned === true,
+    bannedCode: body.isBanned === true ? trimString(body.bannedCode) || 'RULES_VIOLATION' : null,
+    bannedReason: body.isBanned === true ? trimString(body.bannedReason) : null,
+    bannedAt: body.isBanned === true
+      ? (body.bannedAt === undefined ? dbWrite.fn.now() : parseBanDate(body.bannedAt))
+      : null,
+    bannedUntil: body.isBanned === true ? parseBanDate(body.bannedUntil) : null,
     isDeleted: body.isDeleted === true,
     isEmailInvalid: body.isEmailInvalid === true,
     isPhoneInvalid: body.isPhoneInvalid === true,
@@ -335,7 +369,30 @@ users.patch('/users/:id', async (c) => {
   if (body.locale !== undefined) updates.locale = trimString(body.locale);
   if (body.timezone !== undefined) updates.timezone = trimString(body.timezone);
   if (body.role !== undefined) updates.role = trimString(body.role) || VERIFIED_ROLE;
-  if (body.isBlocked !== undefined) updates.isBlocked = body.isBlocked === true;
+  if (body.isBanned === false) {
+    updates.isBanned = false;
+    updates.bannedCode = null;
+    updates.bannedReason = null;
+    updates.bannedAt = null;
+    updates.bannedUntil = null;
+  } else if (body.isBanned === true) {
+    updates.isBanned = true;
+    updates.bannedCode = trimString(body.bannedCode) || user.bannedCode || 'RULES_VIOLATION';
+    updates.bannedReason = body.bannedReason === undefined
+      ? user.bannedReason || null
+      : trimString(body.bannedReason);
+    updates.bannedAt = body.bannedAt === undefined
+      ? user.bannedAt || dbWrite.fn.now()
+      : parseBanDate(body.bannedAt);
+    updates.bannedUntil = body.bannedUntil === undefined ? null : parseBanDate(body.bannedUntil);
+  } else if (user.isBanned) {
+    if (body.bannedCode !== undefined) {
+      updates.bannedCode = trimString(body.bannedCode) || 'RULES_VIOLATION';
+    }
+    if (body.bannedReason !== undefined) updates.bannedReason = trimString(body.bannedReason);
+    if (body.bannedAt !== undefined) updates.bannedAt = parseBanDate(body.bannedAt);
+    if (body.bannedUntil !== undefined) updates.bannedUntil = parseBanDate(body.bannedUntil);
+  }
   if (body.isDeleted !== undefined) updates.isDeleted = body.isDeleted === true;
   if (body.isEmailInvalid !== undefined) updates.isEmailInvalid = body.isEmailInvalid === true;
   if (body.isPhoneInvalid !== undefined) updates.isPhoneInvalid = body.isPhoneInvalid === true;

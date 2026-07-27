@@ -51,6 +51,7 @@ const roles = new Roles({
     'users.viewRole',
     'users.viewLocale',
     'users.viewStatus',
+    'users.viewBanDetails',
     'users.viewMeta',
     'users.editProfile',
     'users.editEmail',
@@ -66,6 +67,7 @@ const roles = new Roles({
     'users.viewPhone',
     'users.viewRole',
     'users.viewLocale',
+    'users.viewBanDetails',
     'users.viewMeta',
   ],
 });
@@ -93,7 +95,11 @@ create table if not exists users (
   "timeCreated" timestamp not null default now(),
   "timeUpdated" timestamp,
   "timeDeleted" timestamp,
-  "isBlocked" boolean not null default false,
+  "isBanned" boolean not null default false,
+  "bannedCode" varchar(255),
+  "bannedReason" text,
+  "bannedAt" timestamp with time zone,
+  "bannedUntil" timestamp with time zone,
   "isDeleted" boolean not null default false,
   login varchar(255) unique,
   password varchar(255),
@@ -195,6 +201,7 @@ const roles = new Roles({
     'users.viewRole',
     'users.viewLocale',
     'users.viewStatus',
+    'users.viewBanDetails',
     'users.viewMeta',
     'users.editProfile',
     'users.editEmail',
@@ -210,6 +217,7 @@ const roles = new Roles({
     'users.viewPhone',
     'users.viewRole',
     'users.viewLocale',
+    'users.viewBanDetails',
     'users.viewMeta',
   ],
 });
@@ -375,8 +383,10 @@ Field visibility permissions:
 - `users.viewPhone`: see `phone`, `isPhoneVerified`.
 - `users.viewRole`: see `role`.
 - `users.viewLocale`: see `locale`, `timezone`.
-- `users.viewStatus`: see `isBlocked`, `isDeleted`, `isEmailInvalid`,
+- `users.viewStatus`: see `isBanned`, `isDeleted`, `isEmailInvalid`,
   `isPhoneInvalid`.
+- `users.viewBanDetails`: see `bannedCode`, `bannedReason`, `bannedAt`,
+  `bannedUntil`; owners receive this permission for their own record.
 - `users.viewMeta`: see `timeCreated`, `timeUpdated`, `timeDeleted`.
 
 Field edit permissions:
@@ -385,7 +395,8 @@ Field edit permissions:
 - `users.editEmail`: edit `email`.
 - `users.editPhone`: edit `phone`.
 - `users.editRole`: edit `role`.
-- `users.editStatus`: edit block/delete/invalid flags.
+- `users.editStatus`: edit ban/delete/invalid flags and ban details. Setting
+  `isBanned` to `false` clears every ban detail field.
 - `users.editVerification`: edit verification flags.
 - `users.uploadAvatar`: upload avatar.
 

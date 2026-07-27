@@ -433,7 +433,7 @@ describe('OAuth', () => {
     expect(user.salt.length > 0).toEqual(true);
     expect(user.isEmailVerified).toEqual(true);
     expect(user.isPhoneVerified).toEqual(false);
-    expect(user.isBlocked).toEqual(false);
+    expect(user.isBanned).toEqual(false);
     expect(user.isDeleted).toEqual(false);
     expect(user.isEmailInvalid).toEqual(false);
     expect(user.isPhoneInvalid).toEqual(false);

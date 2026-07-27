@@ -49,6 +49,7 @@ const roles = new Roles({
     'users.viewRole',
     'users.viewLocale',
     'users.viewStatus',
+    'users.viewBanDetails',
     'users.viewMeta',
     'users.editProfile',
     'users.editEmail',
@@ -64,6 +65,7 @@ const roles = new Roles({
     'users.viewPhone',
     'users.viewRole',
     'users.viewLocale',
+    'users.viewBanDetails',
     'users.viewMeta',
   ],
 });
@@ -715,6 +717,7 @@ Field visibility permissions:
 - `users.viewRole`
 - `users.viewLocale`
 - `users.viewStatus`
+- `users.viewBanDetails`
 - `users.viewMeta`
 
 Field edit permissions:
@@ -726,6 +729,12 @@ Field edit permissions:
 - `users.editStatus`
 - `users.editVerification`
 - `users.uploadAvatar`
+
+Ban state is stored in `isBanned`, `bannedCode`, optional `bannedReason`,
+`bannedAt`, and optional `bannedUntil`. `bannedUntil = null` means a permanent
+ban. Ban details require `users.viewBanDetails`; the user can also see the
+details on their own record. Setting `isBanned` to `false` through the users
+module clears all four detail fields.
 
 ## Data Model Notes
 

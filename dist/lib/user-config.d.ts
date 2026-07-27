@@ -5,6 +5,7 @@ export declare const USER_VISIBLE_FOR: {
     'users.viewRole': string[];
     'users.viewLocale': string[];
     'users.viewStatus': string[];
+    'users.viewBanDetails': string[];
     'users.viewMeta': string[];
 };
 export declare const USER_OWNER_PERMISSIONS: string[];

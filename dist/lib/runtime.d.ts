@@ -15,7 +15,11 @@ export type UserRecord = {
     timeCreated?: Date | string | null;
     timeUpdated?: Date | string | null;
     timeDeleted?: Date | string | null;
-    isBlocked?: boolean;
+    isBanned?: boolean;
+    bannedCode?: string | null;
+    bannedReason?: string | null;
+    bannedAt?: Date | string | null;
+    bannedUntil?: Date | string | null;
     isDeleted?: boolean;
     login?: string | null;
     password?: string | null;
