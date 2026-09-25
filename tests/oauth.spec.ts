@@ -180,6 +180,14 @@ const oauthFetch: typeof fetch = async (input, init) => {
       });
     }
 
+    if (token === 'google-unverified-token') {
+      return jsonResponse({
+        id: 'google-unverified-attacker',
+        email: 'oauth-match@test.local',
+        verified_email: false,
+      });
+    }
+
     if (token === 'google-login-collision-token') {
       return jsonResponse({
         id: 'google-user-login-collision',
@@ -476,7 +484,8 @@ describe('OAuth', () => {
     const user = await client.db('users').where({ email: 'facebook-new@test.local' }).first();
 
     expect(result.email).toEqual('facebook-new@test.local');
-    expect(result.role).toEqual('registered');
+    expect(result.role).toEqual('unverified');
+    expect(result.isEmailVerified).toEqual(false);
     expect(result.oauthServices).toEqual(['facebook']);
     expect(user.oauthProviders.facebook.externalId).toEqual('facebook-user-1');
   });
@@ -496,8 +505,8 @@ describe('OAuth', () => {
     const user = await client.db('users').where({ email: 'microsoft-new@test.local' }).first();
 
     expect(result.email).toEqual('microsoft-new@test.local');
-    expect(result.role).toEqual('registered');
-    expect(result.isEmailVerified).toEqual(true);
+    expect(result.role).toEqual('unverified');
+    expect(result.isEmailVerified).toEqual(false);
     expect(result.oauthServices).toEqual(['microsoft']);
     expect(user.oauthProviders.microsoft.externalId).toEqual('microsoft-user-1');
   });
@@ -621,6 +630,15 @@ describe('OAuth', () => {
     expect(after.role).toEqual('registered');
     expect(after.isEmailVerified).toEqual(true);
     expect(after.oauthProviders.google.externalId).toEqual('google-user-2');
+  });
+
+  test('POST /login/google cannot match an existing user by an unverified email', async () => {
+    const before = await client.db('users').where({ email: 'oauth-match@test.local' }).first();
+    const { result } = await client.post('/login/google', { accessToken: 'google-unverified-token' });
+    const after = await client.db('users').where({ email: 'oauth-match@test.local' }).first();
+
+    expect(result.name).toEqual('OAUTH_CONFLICT');
+    expect(after.oauthProviders.google.externalId).toEqual(before.oauthProviders.google.externalId);
   });
 
   test('POST /login/github with our auth token links provider to current user', async () => {

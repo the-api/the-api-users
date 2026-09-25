@@ -2,6 +2,7 @@ import {
   createHash,
   createHmac,
   randomBytes,
+  randomInt,
   scryptSync,
   timingSafeEqual,
 } from 'node:crypto';
@@ -78,7 +79,7 @@ export const isExpired = (value: Date | string | null | undefined): boolean => {
 export const randomToken = (bytes = 32): string => base64UrlEncode(randomBytes(bytes));
 
 export const randomCode = (length = 6): string => {
-  const numbers = Array.from({ length }, () => Math.floor(Math.random() * 10));
+  const numbers = Array.from({ length }, () => randomInt(0, 10));
   return numbers.join('');
 };
 

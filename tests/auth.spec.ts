@@ -5,6 +5,7 @@ import {
   getPasswordHashAlgorithm,
   getScryptOptions,
   hashPassword,
+  randomCode,
   verifyPassword,
 } from '../src/lib/auth';
 
@@ -31,6 +32,16 @@ afterEach(() => {
     }
 
     process.env[key] = value;
+  }
+});
+
+test('confirmation codes do not depend on Math.random', () => {
+  const originalRandom = Math.random;
+  Math.random = () => { throw new Error('Math.random used'); };
+  try {
+    expect(randomCode(24)).toMatch(/^\d{24}$/);
+  } finally {
+    Math.random = originalRandom;
   }
 });
 

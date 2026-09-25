@@ -67,6 +67,7 @@ export declare const resolveOAuthIdentity: (serviceName: string, payload: OAuthE
 export declare const normalizeOAuthProviders: (value: unknown) => OAuthProvidersMap;
 export declare const getOAuthServices: (value: unknown) => OAuthServiceName[];
 export declare const getOAuthServiceSummaries: (value: unknown) => Array<Pick<OAuthProviderRecord, "service" | "email" | "phone" | "fullName" | "avatar" | "linkedAt" | "updatedAt">>;
+export declare const verifiedOAuthIdentity: (identity: OAuthIdentity) => OAuthIdentity;
 export declare const buildOAuthProviderRecord: (identity: OAuthIdentity, linkedAt?: string) => OAuthProviderRecord;
 export declare const withOAuthProvider: (value: unknown, identity: OAuthIdentity) => OAuthProvidersMap;
 export declare const withoutOAuthProvider: (value: unknown, serviceName: string) => OAuthProvidersMap;

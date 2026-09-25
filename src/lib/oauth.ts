@@ -674,7 +674,7 @@ const getFacebookUserFromAccessToken = async (
     service: 'facebook',
     externalId,
     email: normalizeEmail(data?.email),
-    emailVerified: !!normalizeEmail(data?.email),
+    emailVerified: false,
     fullName: getString(data?.name),
     givenName: getString(data?.first_name),
     familyName: getString(data?.last_name),
@@ -863,7 +863,7 @@ const getMicrosoftUserFromAccessToken = async (
     service: 'microsoft',
     externalId,
     email,
-    emailVerified: !!email,
+    emailVerified: false,
     fullName: getString(data?.displayName),
     givenName: getString(data?.givenName),
     familyName: getString(data?.surname),
@@ -1264,6 +1264,12 @@ export const getOAuthServiceSummaries = (
     }));
 };
 
+export const verifiedOAuthIdentity = (identity: OAuthIdentity): OAuthIdentity => {
+  const email = identity.emailVerified ? identity.email : null;
+  const phone = identity.phoneVerified ? normalizePhone(identity.phone) : null;
+  return { ...identity, email, phone, emailVerified: !!email, phoneVerified: !!phone };
+};
+
 export const buildOAuthProviderRecord = (
   identity: OAuthIdentity,
   linkedAt?: string,
@@ -1271,9 +1277,9 @@ export const buildOAuthProviderRecord = (
   service: identity.service,
   externalId: identity.externalId,
   email: identity.email || null,
-  emailVerified: !!identity.email,
+  emailVerified: identity.emailVerified,
   phone: normalizePhone(identity.phone) || null,
-  phoneVerified: !!normalizePhone(identity.phone),
+  phoneVerified: identity.phoneVerified,
   fullName: identity.fullName || null,
   givenName: identity.givenName || null,
   familyName: identity.familyName || null,

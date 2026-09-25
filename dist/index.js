@@ -174,6 +174,7 @@ import {
   createHash,
   createHmac,
   randomBytes,
+  randomInt,
   scryptSync,
   timingSafeEqual
 } from "node:crypto";
@@ -220,7 +221,7 @@ var isExpired = (value) => {
 };
 var randomToken = (bytes = 32) => base64UrlEncode(randomBytes(bytes));
 var randomCode = (length = 6) => {
-  const numbers = Array.from({ length }, () => Math.floor(Math.random() * 10));
+  const numbers = Array.from({ length }, () => randomInt(0, 10));
   return numbers.join("");
 };
 var randomSalt = () => randomToken(16);
@@ -907,7 +908,7 @@ var getFacebookUserFromAccessToken = async (accessToken, meta = {}) => {
     service: "facebook",
     externalId,
     email: normalizeEmail(data?.email),
-    emailVerified: !!normalizeEmail(data?.email),
+    emailVerified: false,
     fullName: getString(data?.name),
     givenName: getString(data?.first_name),
     familyName: getString(data?.last_name),
@@ -1060,7 +1061,7 @@ var getMicrosoftUserFromAccessToken = async (accessToken, meta = {}) => {
     service: "microsoft",
     externalId,
     email,
-    emailVerified: !!email,
+    emailVerified: false,
     fullName: getString(data?.displayName),
     givenName: getString(data?.givenName),
     familyName: getString(data?.surname),
@@ -1391,13 +1392,18 @@ var getOAuthServiceSummaries = (value) => {
     updatedAt: provider.updatedAt
   }));
 };
+var verifiedOAuthIdentity = (identity) => {
+  const email = identity.emailVerified ? identity.email : null;
+  const phone = identity.phoneVerified ? normalizePhone(identity.phone) : null;
+  return { ...identity, email, phone, emailVerified: !!email, phoneVerified: !!phone };
+};
 var buildOAuthProviderRecord = (identity, linkedAt) => ({
   service: identity.service,
   externalId: identity.externalId,
   email: identity.email || null,
-  emailVerified: !!identity.email,
+  emailVerified: identity.emailVerified,
   phone: normalizePhone(identity.phone) || null,
-  phoneVerified: !!normalizePhone(identity.phone),
+  phoneVerified: identity.phoneVerified,
   fullName: identity.fullName || null,
   givenName: identity.givenName || null,
   familyName: identity.familyName || null,
@@ -1505,7 +1511,8 @@ var USER_SELF_EDITABLE_FIELDS = ["fullName", "locale", "timezone"];
 // src/modules/login.ts
 var login = new Routings;
 var CODE_EXPIRES_IN = process.env.AUTH_CODE_EXPIRES_IN || "30m";
-var RECOVER_CODE_LENGTH = Number(process.env.AUTH_RECOVER_CODE_LENGTH || 12);
+var configuredRecoverCodeLength = Number(process.env.AUTH_RECOVER_CODE_LENGTH || 24);
+var RECOVER_CODE_LENGTH = Number.isSafeInteger(configuredRecoverCodeLength) ? Math.max(24, configuredRecoverCodeLength) : 24;
 var RECOVER_CODE_EXPIRES_IN = process.env.AUTH_RECOVER_CODE_EXPIRES_IN || CODE_EXPIRES_IN;
 var REFRESH_EXPIRES_IN = process.env.AUTH_REFRESH_EXPIRES_IN || "30d";
 var VERIFIED_ROLE2 = process.env.AUTH_VERIFIED_ROLE || process.env.AUTH_DEFAULT_ROLE || "registered";
@@ -1934,13 +1941,13 @@ var createOAuthUser = async (c, identity) => {
     isBanned: false,
     isDeleted: false,
     login: loginName,
-    isEmailVerified: !!email,
+    isEmailVerified: !!email && !!identity.emailVerified,
     isEmailInvalid: false,
-    isPhoneVerified: !!phone,
+    isPhoneVerified: !!phone && !!identity.phoneVerified,
     isPhoneInvalid: false,
     password: "",
     salt: randomSalt(),
-    role: getRoleAfterVerifiedIdentity(null),
+    role: identity.emailVerified || identity.phoneVerified ? getRoleAfterVerifiedIdentity(null) : UNVERIFIED_ROLE2,
     refresh: randomToken(),
     timeRefreshExpired: getExpiresAt(REFRESH_EXPIRES_IN, 30 * 24 * 60 * 60),
     oauthProviders: withOAuthProvider(null, identity),
@@ -2034,25 +2041,23 @@ var registerOAuthRoutes = (service) => {
       user: body.user
     });
     clearOAuthCodeVerifier(c, service);
+    const normalizedIdentity = verifiedOAuthIdentity(identity);
     const currentUser = await getOptionalCurrentUserRecord(c);
     const userByService = await findUserByOAuthService(c, service, identity.externalId);
-    const userByEmail = identity.email ? await findUserByEmail(c, identity.email) : undefined;
-    const providerPhone = identity.phone ? normalizePhone(identity.phone) : null;
+    const userByEmail = normalizedIdentity.email ? await findUserByEmail(c, normalizedIdentity.email) : undefined;
+    const providerPhone = normalizedIdentity.phone;
     const userByPhone = providerPhone ? await findUserByPhone(c, providerPhone) : undefined;
+    if (!currentUser && !userByService && identity.email && !identity.emailVerified && await findUserByEmail(c, identity.email)) {
+      throw new Error("OAUTH_CONFLICT");
+    }
     let user = chooseOAuthTargetUser({
       currentUser,
       userByService: userByService ? assertUserActive(userByService) : undefined,
       userByEmail: userByEmail ? assertUserActive(userByEmail) : undefined,
       userByPhone: userByPhone ? assertUserActive(userByPhone) : undefined
     });
-    const normalizedIdentity = {
-      ...identity,
-      phone: providerPhone,
-      emailVerified: !!identity.email,
-      phoneVerified: !!providerPhone
-    };
     if (!user) {
-      user = await createOAuthUser(c, normalizedIdentity);
+      user = await createOAuthUser(c, identity);
     } else {
       user = await syncUserWithOAuthIdentity(c, user, normalizedIdentity);
     }

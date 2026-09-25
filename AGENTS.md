@@ -444,14 +444,18 @@ Behavior:
 
 - If the provider account is already linked, the user receives normal `token`
   and `refresh`.
-- If the provider returns an e-mail or phone that belongs to an existing user,
-  that user is logged in and the provider is linked automatically.
+- If the provider confirms an e-mail or phone that belongs to an existing user,
+  that user is logged in and the provider is linked automatically. Unverified
+  contact details cannot select an existing account.
 - If no user exists, a new user is created without a local password:
   `password = ""`, with a generated `salt`.
 - A new OAuth user receives a `login` built from the e-mail local part or phone
   plus a random number.
-- OAuth identity with e-mail/phone is treated as verified.
-- If the role was `unverified`, it is promoted to `registered`.
+- Contact details are verified only when the provider explicitly confirms them.
+  New Facebook and Microsoft users with an unverified profile e-mail retain the
+  `unverified` role until they confirm it through the API.
+- If a contact detail becomes verified, the `unverified` role is promoted to
+  `registered`.
 - If `Authorization: Bearer <token>` is sent to `POST /login/{service}`, the
   provider is linked to the current user.
 - `DELETE /login/{service}` removes the provider from `users.oauthProviders`.

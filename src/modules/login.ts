@@ -11,6 +11,7 @@ import {
   rememberOAuthCodeVerifier,
   rememberOAuthState,
   resolveOAuthIdentity,
+  verifiedOAuthIdentity,
   validateOAuthState,
   findUserByOAuthService,
   withOAuthProvider,
@@ -53,7 +54,10 @@ import {
 const login = new Routings();
 
 const CODE_EXPIRES_IN = process.env.AUTH_CODE_EXPIRES_IN || '30m';
-const RECOVER_CODE_LENGTH = Number(process.env.AUTH_RECOVER_CODE_LENGTH || 12);
+const configuredRecoverCodeLength = Number(process.env.AUTH_RECOVER_CODE_LENGTH || 24);
+const RECOVER_CODE_LENGTH = Number.isSafeInteger(configuredRecoverCodeLength)
+  ? Math.max(24, configuredRecoverCodeLength)
+  : 24;
 const RECOVER_CODE_EXPIRES_IN = process.env.AUTH_RECOVER_CODE_EXPIRES_IN || CODE_EXPIRES_IN;
 const REFRESH_EXPIRES_IN = process.env.AUTH_REFRESH_EXPIRES_IN || '30d';
 const VERIFIED_ROLE = process.env.AUTH_VERIFIED_ROLE || process.env.AUTH_DEFAULT_ROLE || 'registered';
@@ -592,13 +596,15 @@ const createOAuthUser = async (c: AppContext, identity: OAuthIdentity): Promise<
     isBanned: false,
     isDeleted: false,
     login: loginName,
-    isEmailVerified: !!email,
+    isEmailVerified: !!email && !!identity.emailVerified,
     isEmailInvalid: false,
-    isPhoneVerified: !!phone,
+    isPhoneVerified: !!phone && !!identity.phoneVerified,
     isPhoneInvalid: false,
     password: '',
     salt: randomSalt(),
-    role: getRoleAfterVerifiedIdentity(null),
+    role: identity.emailVerified || identity.phoneVerified
+      ? getRoleAfterVerifiedIdentity(null)
+      : UNVERIFIED_ROLE,
     refresh: randomToken(),
     timeRefreshExpired: getExpiresAt(REFRESH_EXPIRES_IN, 30 * 24 * 60 * 60),
     oauthProviders: withOAuthProvider(null, identity),
@@ -709,11 +715,16 @@ const registerOAuthRoutes = (service: OAuthServiceName): void => {
     });
     clearOAuthCodeVerifier(c, service);
 
+    const normalizedIdentity = verifiedOAuthIdentity(identity);
     const currentUser = await getOptionalCurrentUserRecord(c);
     const userByService = await findUserByOAuthService(c, service, identity.externalId);
-    const userByEmail = identity.email ? await findUserByEmail(c, identity.email) : undefined;
-    const providerPhone = identity.phone ? normalizePhone(identity.phone) : null;
+    const userByEmail = normalizedIdentity.email ? await findUserByEmail(c, normalizedIdentity.email) : undefined;
+    const providerPhone = normalizedIdentity.phone;
     const userByPhone = providerPhone ? await findUserByPhone(c, providerPhone) : undefined;
+    if (!currentUser && !userByService && identity.email && !identity.emailVerified
+      && await findUserByEmail(c, identity.email)) {
+      throw new Error('OAUTH_CONFLICT');
+    }
 
     let user = chooseOAuthTargetUser({
       currentUser,
@@ -722,15 +733,8 @@ const registerOAuthRoutes = (service: OAuthServiceName): void => {
       userByPhone: userByPhone ? assertUserActive(userByPhone) : undefined,
     });
 
-    const normalizedIdentity: OAuthIdentity = {
-      ...identity,
-      phone: providerPhone,
-      emailVerified: !!identity.email,
-      phoneVerified: !!providerPhone,
-    };
-
     if (!user) {
-      user = await createOAuthUser(c, normalizedIdentity);
+      user = await createOAuthUser(c, identity);
     } else {
       user = await syncUserWithOAuthIdentity(c, user, normalizedIdentity);
     }

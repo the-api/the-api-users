@@ -97,7 +97,7 @@ Core auth variables:
 - `AUTH_UNVERIFIED_ROLE`
 - `AUTH_REQUIRE_EMAIL_VERIFICATION`
 - `AUTH_CODE_EXPIRES_IN`
-- `AUTH_RECOVER_CODE_LENGTH`
+- `AUTH_RECOVER_CODE_LENGTH` (at least 24 digits; smaller values are raised to 24)
 - `AUTH_RECOVER_CODE_EXPIRES_IN`
 - `AUTH_REFRESH_EXPIRES_IN`
 - `AUTH_MAX_CODE_ATTEMPTS`
@@ -178,6 +178,7 @@ Notes:
 - Apple browser callbacks use `response_mode=form_post`, so your frontend callback should accept form posts or forward the received fields to `POST /login/apple`.
 - Apple `AUTH_APPLE_REDIRECT_URI` must exactly match the return URL used in the Apple authorization request and registered for the Services ID, even when that frontend URL forwards the callback to a different API host.
 - Microsoft Entra ID login uses the v2 endpoint and defaults to tenant `common` unless `AUTH_MICROSOFT_TENANT_ID` is set.
+- OAuth links to an existing account by email only when the provider explicitly confirms the email. Facebook and Microsoft profile emails are treated as unverified; a new account can use one, but stays in the `unverified` role until it is confirmed through the API.
 - If a provider is not fully configured with required `AUTH_*` variables, `GET /login/{service}` and `POST /login/{service}` respond with `404` the same way as an unavailable provider.
 - Twitter/X usually does not return e-mail in the standard OAuth profile. First-time sign-in will work only if the provider returns a usable e-mail/phone or if the request is linking to an already authenticated user.
 - Use HTTPS in production and register the exact redirect URIs in the provider console.
