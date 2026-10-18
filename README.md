@@ -762,6 +762,28 @@ Each provider record stores:
 - `updatedAt`
 - `profile`
 
+## Running your own OAuth2 / OpenID Connect server
+
+The optional sibling package
+[`the-api-users-oauth2-server`](../the-api-users-oauth2-server/README.md)
+adds shared sign-in (SSO) and delegated API access using the users managed by
+this package. It supports server applications, SPAs and native/mobile clients
+with Authorization Code + PKCE, OIDC ID tokens, userinfo, consent and rotating
+refresh tokens.
+
+Create an instance with `createOAuthServer({ issuer, jwks })`, add its
+`oauth.routings` to `TheAPI({ routings })`, and add its `migrationDir` after the
+users migration. Call `oauth.mount(api)` **before** `api.up()` or `api.init()`:
+standard OAuth responses and opaque access tokens must bypass the normal
+the-api JWT/envelope middleware. Existing `/login` and `/users` flows remain
+the identity layer.
+
+Application management is controlled by named `oauthClients.*` permissions
+through `the-api-roles`, not by a hard-coded role name. The module includes
+login/consent pages and `renderLogin` / `renderConsent` hooks for replacing them.
+See its README for local installation (the new package is not published yet),
+key generation, permission setup, protected API resources and custom-page examples.
+
 ## Development
 
 Run tests:
