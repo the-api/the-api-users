@@ -183,3 +183,12 @@ export const signJwt = (
 
   return `${encodedHeader}.${encodedPayload}.${base64UrlEncode(signature)}`;
 };
+
+// A tagged hash cannot authenticate through the ordinary password verifier.
+export const TEMPORARY_PASSWORD_PREFIX = 'temporary:';
+export const isTemporaryPassword = (hash: unknown): hash is string =>
+  typeof hash === 'string' && hash.startsWith(TEMPORARY_PASSWORD_PREFIX);
+export const createPassword = (password: string, temporary = false) => {
+  const salt = randomSalt();
+  return { salt, password: (temporary ? TEMPORARY_PASSWORD_PREFIX : '') + hashPassword(password, salt) };
+};

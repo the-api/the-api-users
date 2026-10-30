@@ -29,4 +29,10 @@ export declare const signJwt: (payload: JwtPayload, { secret, expiresIn, }?: {
     secret?: string;
     expiresIn?: string | number;
 }) => string;
+export declare const TEMPORARY_PASSWORD_PREFIX = "temporary:";
+export declare const isTemporaryPassword: (hash: unknown) => hash is string;
+export declare const createPassword: (password: string, temporary?: boolean) => {
+    salt: string;
+    password: string;
+};
 //# sourceMappingURL=auth.d.ts.map

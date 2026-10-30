@@ -8,3 +8,5 @@ const migrationUpdateDir = resolve(moduleDir, '../migrationsUpdate');
 export { migrationDir, migrationUpdateDir };
 export { login } from './modules/login';
 export { users } from './modules/users';
+
+export { createPassword } from './lib/auth';

@@ -21,6 +21,8 @@ import {
   type OAuthServiceName,
 } from '../lib/oauth';
 import {
+  TEMPORARY_PASSWORD_PREFIX,
+  isTemporaryPassword,
   getExpiresAt,
   hashPassword,
   isExpired,
@@ -66,6 +68,7 @@ const REQUIRE_EMAIL_VERIFICATION = process.env.AUTH_REQUIRE_EMAIL_VERIFICATION =
 const MAX_CODE_ATTEMPTS = Number(process.env.AUTH_MAX_CODE_ATTEMPTS || 5);
 
 const LOGIN_ERRORS = {
+  PASSWORD_CHANGE_REQUIRED: { code: 130, status: 403, description: 'Set a permanent password first' },
   USER_NOT_FOUND: {
     code: 101,
     status: 404,
@@ -340,6 +343,7 @@ const saveAuthResult = async (
   user: UserRecord,
   refreshOverride?: string,
 ): Promise<void> => {
+  if (isTemporaryPassword(user.password)) throw new Error('PASSWORD_CHANGE_REQUIRED');
   const dbWrite = getDbWrite(c);
   const refresh = refreshOverride
     || (!isExpired(user.timeRefreshExpired) ? user.refresh : undefined)
@@ -927,6 +931,20 @@ login.post('/login', async (c) => {
     ? await findUserByEmail(c, email)
     : await findUserByLogin(c, loginName as string));
 
+  if (isTemporaryPassword(user.password)) {
+    if (!user.salt || !verifyPassword(password, user.salt, user.password.slice(TEMPORARY_PASSWORD_PREFIX.length))) {
+      throw new Error('USER_NOT_FOUND');
+    }
+    const code = randomToken();
+    const changed = await getDbWrite(c)('users').where({ id: user.id, password: user.password }).update({
+      recoverCode: code, recoverCodeAttempts: 0,
+      timeRecoverCodeExpired: getExpiresAt(RECOVER_CODE_EXPIRES_IN, 30 * 60),
+    });
+    if (!changed) throw new Error('USER_NOT_FOUND');
+    c.set('result', { passwordChangeRequired: true, passwordSetupToken: code });
+    return;
+  }
+
   if (!user.password || !user.salt || !verifyPassword(password, user.salt, user.password)) {
     throw new Error('USER_NOT_FOUND');
   }
@@ -998,8 +1016,7 @@ login.post('/login/restore', async (c) => {
 
   if (!code || !password) throw new Error('WRONG_CODE');
 
-  const user = await findUserByRecoverCode(c, code);
-  await verifyStoredCode(c, user, {
+  const user = await verifyStoredCode(c, await findUserByRecoverCode(c, code), {
     code,
     codeField: 'recoverCode',
     attemptsField: 'recoverCodeAttempts',
@@ -1007,13 +1024,17 @@ login.post('/login/restore', async (c) => {
     errorName: 'WRONG_CODE',
   });
 
+  assertUserActive(user);
   const dbWrite = getDbWrite(c);
   const salt = randomSalt();
   const passwordHash = hashPassword(password, salt);
 
-  await dbWrite('users')
-    .where({ id: user!.id })
+  const temporary = isTemporaryPassword(user.password);
+  if (temporary && user.salt && verifyPassword(password, user.salt, user.password!.slice(TEMPORARY_PASSWORD_PREFIX.length))) throw new Error('PASSWORD_CHANGE_REQUIRED');
+  const changed = await dbWrite('users')
+    .where({ id: user.id, recoverCode: code, password: user.password, email: user.email })
     .update({
+      ...(temporary ? { isEmailVerified: true, isEmailInvalid: false, registerCode: null, registerCodeAttempts: 0, timeRegisterCodeExpired: null, role: user.role === UNVERIFIED_ROLE ? VERIFIED_ROLE : user.role } : {}),
       password: passwordHash,
       salt,
       refresh: randomToken(),
@@ -1025,7 +1046,11 @@ login.post('/login/restore', async (c) => {
       timeUpdated: dbWrite.fn.now(),
     });
 
-  c.set('result', { ok: true });
+  if (!changed) throw new Error('WRONG_CODE');
+  if (temporary) {
+    const updated = await dbWrite('users').where({ id: user.id }).first() as UserRecord;
+    await saveAuthResult(c, updated);
+  } else c.set('result', { ok: true });
 });
 
 login.patch('/login', async (c) => {

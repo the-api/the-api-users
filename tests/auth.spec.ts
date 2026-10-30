@@ -119,3 +119,14 @@ describe('auth password hashing', () => {
     expect(getPasswordHashAlgorithm()).toEqual('sha256');
   });
 });
+
+test('temporary password hashes cannot authenticate as ordinary passwords', async () => {
+  const { createPassword, isTemporaryPassword, TEMPORARY_PASSWORD_PREFIX } = await import('../src/lib/auth');
+  const credential = createPassword('temporary-secret', true);
+  expect(isTemporaryPassword(credential.password)).toBe(true);
+  expect(verifyPassword('temporary-secret', credential.salt, credential.password)).toBe(false);
+  expect(verifyPassword('temporary-secret', credential.salt, credential.password.slice(TEMPORARY_PASSWORD_PREFIX.length))).toBe(true);
+  const permanent = createPassword('permanent-secret');
+  expect(isTemporaryPassword(permanent.password)).toBe(false);
+  expect(verifyPassword('permanent-secret', permanent.salt, permanent.password)).toBe(true);
+});

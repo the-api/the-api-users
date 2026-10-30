@@ -797,3 +797,20 @@ Build the package:
 ```bash
 bun run build
 ```
+
+### Temporary passwords issued by an administrator
+
+`createPassword(plaintext, true)` returns `{ password, salt }` with a tagged
+password hash. Store both fields and deliver the plaintext through your app's
+transactional email queue. Never return or log it in an API response. Omit the
+second argument for a permanent password. Authorization for issuing or resetting
+credentials belongs to the calling application's admin controller.
+
+`POST /login` with a matching temporary password returns
+`{ passwordChangeRequired: true, passwordSetupToken }` without session credentials.
+Submit this capability as `code` to `POST /login/restore` with a new `password`.
+The capability expires according to the recovery code configuration, is replaced
+by subsequent temporary logins, and is consumed atomically on success. Completion
+confirms the email and returns the normal user, access token and refresh token.
+Ordinary recovery keeps its existing response. Browser adapters should keep the
+setup capability in an HttpOnly cookie, separate from authentication cookies.

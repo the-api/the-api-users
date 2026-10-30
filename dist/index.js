@@ -291,6 +291,12 @@ var signJwt = (payload, {
   const signature = createHmac("sha256", secret).update(`${encodedHeader}.${encodedPayload}`).digest();
   return `${encodedHeader}.${encodedPayload}.${base64UrlEncode(signature)}`;
 };
+var TEMPORARY_PASSWORD_PREFIX = "temporary:";
+var isTemporaryPassword = (hash) => typeof hash === "string" && hash.startsWith(TEMPORARY_PASSWORD_PREFIX);
+var createPassword = (password, temporary = false) => {
+  const salt = randomSalt();
+  return { salt, password: (temporary ? TEMPORARY_PASSWORD_PREFIX : "") + hashPassword(password, salt) };
+};
 
 // src/lib/runtime.ts
 import { mkdir, unlink, writeFile } from "node:fs/promises";
@@ -1188,7 +1194,7 @@ var getOAuthAuthorizationUrl = (serviceName, stateOverride) => {
   const state = stateOverride || createOAuthState();
   const config = getServiceConfig(service);
   if (service === "google") {
-    const url2 = `https://accounts.google.com/o/oauth2/v2/auth?${toQueryString({
+    const url = `https://accounts.google.com/o/oauth2/v2/auth?${toQueryString({
       client_id: config.clientId,
       redirect_uri: config.redirectUri,
       response_type: "code",
@@ -1198,10 +1204,10 @@ var getOAuthAuthorizationUrl = (serviceName, stateOverride) => {
       access_type: getString(process.env.AUTH_GOOGLE_ACCESS_TYPE) || "offline",
       prompt: getString(process.env.AUTH_GOOGLE_PROMPT) || undefined
     })}`;
-    return { service, state, url: url2 };
+    return { service, state, url };
   }
   if (service === "apple") {
-    const url2 = `https://appleid.apple.com/auth/authorize?${toQueryString({
+    const url = `https://appleid.apple.com/auth/authorize?${toQueryString({
       response_type: "code",
       client_id: config.clientId,
       redirect_uri: config.redirectUri,
@@ -1209,39 +1215,39 @@ var getOAuthAuthorizationUrl = (serviceName, stateOverride) => {
       state,
       response_mode: "form_post"
     })}`;
-    return { service, state, url: url2 };
+    return { service, state, url };
   }
   if (service === "github") {
-    const url2 = `https://github.com/login/oauth/authorize?${toQueryString({
+    const url = `https://github.com/login/oauth/authorize?${toQueryString({
       client_id: config.clientId,
       redirect_uri: config.redirectUri,
       scope: config.scope.join(" "),
       state
     })}`;
-    return { service, state, url: url2 };
+    return { service, state, url };
   }
   if (service === "facebook") {
-    const url2 = `https://www.facebook.com/${FACEBOOK_API_VERSION}/dialog/oauth?${toQueryString({
+    const url = `https://www.facebook.com/${FACEBOOK_API_VERSION}/dialog/oauth?${toQueryString({
       client_id: config.clientId,
       redirect_uri: config.redirectUri,
       response_type: "code",
       scope: config.scope.join(","),
       state
     })}`;
-    return { service, state, url: url2 };
+    return { service, state, url };
   }
   if (service === "linkedin") {
-    const url2 = `https://www.linkedin.com/oauth/v2/authorization?${toQueryString({
+    const url = `https://www.linkedin.com/oauth/v2/authorization?${toQueryString({
       response_type: "code",
       client_id: config.clientId,
       redirect_uri: config.redirectUri,
       scope: config.scope.join(" "),
       state
     })}`;
-    return { service, state, url: url2 };
+    return { service, state, url };
   }
   if (service === "microsoft") {
-    const url2 = `https://login.microsoftonline.com/${config.tenantId}/oauth2/v2.0/authorize?${toQueryString({
+    const url = `https://login.microsoftonline.com/${config.tenantId}/oauth2/v2.0/authorize?${toQueryString({
       response_type: "code",
       client_id: config.clientId,
       redirect_uri: config.redirectUri,
@@ -1249,7 +1255,7 @@ var getOAuthAuthorizationUrl = (serviceName, stateOverride) => {
       include_granted_scopes: "true",
       state
     })}`;
-    return { service, state, url: url2 };
+    return { service, state, url };
   }
   const codeVerifier = createCodeVerifier();
   const codeChallenge = createCodeChallenge(codeVerifier);
@@ -1401,9 +1407,9 @@ var buildOAuthProviderRecord = (identity, linkedAt) => ({
   service: identity.service,
   externalId: identity.externalId,
   email: identity.email || null,
-  emailVerified: identity.emailVerified,
+  emailVerified: identity.emailVerified === true,
   phone: normalizePhone(identity.phone) || null,
-  phoneVerified: identity.phoneVerified,
+  phoneVerified: identity.phoneVerified === true,
   fullName: identity.fullName || null,
   givenName: identity.givenName || null,
   familyName: identity.familyName || null,
@@ -1520,6 +1526,7 @@ var UNVERIFIED_ROLE2 = process.env.AUTH_UNVERIFIED_ROLE || "unverified";
 var REQUIRE_EMAIL_VERIFICATION = process.env.AUTH_REQUIRE_EMAIL_VERIFICATION === "true";
 var MAX_CODE_ATTEMPTS = Number(process.env.AUTH_MAX_CODE_ATTEMPTS || 5);
 var LOGIN_ERRORS = {
+  PASSWORD_CHANGE_REQUIRED: { code: 130, status: 403, description: "Set a permanent password first" },
   USER_NOT_FOUND: {
     code: 101,
     status: 404,
@@ -1762,6 +1769,8 @@ var createUniqueOAuthLogin = async (c, identityValue) => {
   throw new Error("LOGIN_EXISTS");
 };
 var saveAuthResult = async (c, user, refreshOverride) => {
+  if (isTemporaryPassword(user.password))
+    throw new Error("PASSWORD_CHANGE_REQUIRED");
   const dbWrite = getDbWrite(c);
   const refresh = refreshOverride || (!isExpired(user.timeRefreshExpired) ? user.refresh : undefined) || randomToken();
   const timeRefreshExpired = getExpiresAt(REFRESH_EXPIRES_IN, 30 * 24 * 60 * 60);
@@ -2221,6 +2230,21 @@ login.post("/login", async (c) => {
   if (!email && !loginName)
     throw new Error("LOGIN_OR_EMAIL_REQUIRED");
   const user = assertUserActive(email ? await findUserByEmail(c, email) : await findUserByLogin(c, loginName));
+  if (isTemporaryPassword(user.password)) {
+    if (!user.salt || !verifyPassword(password, user.salt, user.password.slice(TEMPORARY_PASSWORD_PREFIX.length))) {
+      throw new Error("USER_NOT_FOUND");
+    }
+    const code = randomToken();
+    const changed = await getDbWrite(c)("users").where({ id: user.id, password: user.password }).update({
+      recoverCode: code,
+      recoverCodeAttempts: 0,
+      timeRecoverCodeExpired: getExpiresAt(RECOVER_CODE_EXPIRES_IN, 30 * 60)
+    });
+    if (!changed)
+      throw new Error("USER_NOT_FOUND");
+    c.set("result", { passwordChangeRequired: true, passwordSetupToken: code });
+    return;
+  }
   if (!user.password || !user.salt || !verifyPassword(password, user.salt, user.password)) {
     throw new Error("USER_NOT_FOUND");
   }
@@ -2272,18 +2296,22 @@ login.post("/login/restore", async (c) => {
   const password = trimString(body.password);
   if (!code || !password)
     throw new Error("WRONG_CODE");
-  const user = await findUserByRecoverCode(c, code);
-  await verifyStoredCode(c, user, {
+  const user = await verifyStoredCode(c, await findUserByRecoverCode(c, code), {
     code,
     codeField: "recoverCode",
     attemptsField: "recoverCodeAttempts",
     expiresField: "timeRecoverCodeExpired",
     errorName: "WRONG_CODE"
   });
+  assertUserActive(user);
   const dbWrite = getDbWrite(c);
   const salt = randomSalt();
   const passwordHash = hashPassword(password, salt);
-  await dbWrite("users").where({ id: user.id }).update({
+  const temporary = isTemporaryPassword(user.password);
+  if (temporary && user.salt && verifyPassword(password, user.salt, user.password.slice(TEMPORARY_PASSWORD_PREFIX.length)))
+    throw new Error("PASSWORD_CHANGE_REQUIRED");
+  const changed = await dbWrite("users").where({ id: user.id, recoverCode: code, password: user.password, email: user.email }).update({
+    ...temporary ? { isEmailVerified: true, isEmailInvalid: false, registerCode: null, registerCodeAttempts: 0, timeRegisterCodeExpired: null, role: user.role === UNVERIFIED_ROLE2 ? VERIFIED_ROLE2 : user.role } : {},
     password: passwordHash,
     salt,
     refresh: randomToken(),
@@ -2294,7 +2322,13 @@ login.post("/login/restore", async (c) => {
     timeRecoverCodeExpired: null,
     timeUpdated: dbWrite.fn.now()
   });
-  c.set("result", { ok: true });
+  if (!changed)
+    throw new Error("WRONG_CODE");
+  if (temporary) {
+    const updated = await dbWrite("users").where({ id: user.id }).first();
+    await saveAuthResult(c, updated);
+  } else
+    c.set("result", { ok: true });
 });
 login.patch("/login", async (c) => {
   const authUser = requireAuth(c);
@@ -2428,18 +2462,18 @@ login.post("/login/email/confirm", confirmEmailChange);
 login.post("/login/email/resend", async (c) => {
   const user = await getCurrentUserRecord(c);
   if (user.emailToChange) {
-    const code2 = randomCode();
+    const code = randomCode();
     await setCode(c, user.id, {
       codeField: "emailChangeCode",
       attemptsField: "emailChangeCodeAttempts",
       expiresField: "timeEmailChangeCodeExpired",
-      code: code2,
+      code,
       expiresAt: getExpiresAt(CODE_EXPIRES_IN, 30 * 60),
       extra: {
         emailToChange: user.emailToChange
       }
     });
-    await sendEmailChangeCode(c, user.emailToChange, user, code2);
+    await sendEmailChangeCode(c, user.emailToChange, user, code);
     c.set("result", { ok: true });
     return;
   }
@@ -2513,18 +2547,18 @@ login.post("/login/phone/confirm", confirmPhone);
 login.post("/login/phone/resend", async (c) => {
   const user = await getCurrentUserRecord(c);
   if (user.phoneToChange) {
-    const code2 = randomCode();
+    const code = randomCode();
     await setCode(c, user.id, {
       codeField: "phoneChangeCode",
       attemptsField: "phoneChangeCodeAttempts",
       expiresField: "timePhoneChangeCodeExpired",
-      code: code2,
+      code,
       expiresAt: getExpiresAt(CODE_EXPIRES_IN, 30 * 60),
       extra: {
         phoneToChange: user.phoneToChange
       }
     });
-    await sendPhoneConfirmationCode(c, user.phoneToChange, code2);
+    await sendPhoneConfirmationCode(c, user.phoneToChange, code);
     c.set("result", { ok: true });
     return;
   }
@@ -3050,8 +3084,9 @@ var moduleDir = dirname2(fileURLToPath(import.meta.url));
 var migrationDir = resolve(moduleDir, "../migrations");
 var migrationUpdateDir = resolve(moduleDir, "../migrationsUpdate");
 export {
-  users,
-  migrationUpdateDir,
+  createPassword,
+  login,
   migrationDir,
-  login
+  migrationUpdateDir,
+  users
 };

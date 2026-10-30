@@ -289,3 +289,32 @@ describe('Login', () => {
     expect(result.phone).toEqual(authPhone);
   });
 });
+
+test('temporary password exchange is restricted, expiring, single-use and confirms email', async () => {
+  const { createPassword } = await import('../src/lib/auth');
+  const email = 'temporary-user@test.local';
+  const [user] = await db('users').insert({ email, role: 'unverified', isEmailVerified: false,
+    ...createPassword('temporary-secret', true) }).returning('*');
+  expect((await client.post('/login', { email, password: 'wrong-secret' })).error).toBe(true);
+  const login = await client.post('/login', { email, password: 'temporary-secret' });
+  expect(login.result.passwordChangeRequired).toBe(true);
+  expect(login.result.token).toBeUndefined();
+  expect(login.result.refresh).toBeUndefined();
+  const expired = login.result.passwordSetupToken;
+  await db('users').where({ id: user.id }).update({ timeRecoverCodeExpired: new Date(0) });
+  expect((await client.post('/login/restore', { code: expired, password: 'permanent-secret' })).error).toBe(true);
+  const fresh = await client.post('/login', { email, password: 'temporary-secret' });
+  const code = fresh.result.passwordSetupToken;
+  expect((await client.post('/login/restore', { code, password: 'temporary-secret' })).error).toBe(true);
+  await db('users').where({ id: user.id }).update({ isBanned: true });
+  expect((await client.post('/login/restore', { code, password: 'permanent-secret' })).error).toBe(true);
+  await db('users').where({ id: user.id }).update({ isBanned: false });
+  const completed = await client.post('/login/restore', { code, password: 'permanent-secret' });
+  expect(completed.result.token).toBeTruthy();
+  expect(completed.result.refresh).toBeTruthy();
+  expect(completed.result.isEmailVerified).toBe(true);
+  expect(completed.result.role).toBe('registered');
+  expect((await client.post('/login/restore', { code, password: 'replayed-secret' })).error).toBe(true);
+  expect((await client.post('/login', { email, password: 'temporary-secret' })).error).toBe(true);
+  expect((await client.post('/login', { email, password: 'permanent-secret' })).result.token).toBeTruthy();
+});
