@@ -58,7 +58,7 @@ describe('Users', () => {
   const updatedUserEmail = 'user-1-updated@test.local';
 
   let userId = 1;
-  let ownerUserId = testUsers.registered.id;
+  const ownerUserId = testUsers.registered.userId;
 
   test('prepare owner user for owner-permission checks', async () => {
     await db('users').insert({
