@@ -1,6 +1,6 @@
 import type { AppContext } from 'the-api-routings';
 import { type UserRecord } from './runtime';
-export declare const OAUTH_SERVICES: readonly ["apple", "facebook", "github", "google", "linkedin", "microsoft", "twitter"];
+export declare const OAUTH_SERVICES: readonly ['apple', 'facebook', 'github', 'google', 'linkedin', 'microsoft', 'twitter'];
 export type OAuthServiceName = typeof OAUTH_SERVICES[number];
 export type OAuthIdentity = {
     service: OAuthServiceName;
@@ -66,7 +66,7 @@ export declare const clearOAuthCodeVerifier: (c: AppContext, service: OAuthServi
 export declare const resolveOAuthIdentity: (serviceName: string, payload: OAuthExchangePayload) => Promise<OAuthIdentity>;
 export declare const normalizeOAuthProviders: (value: unknown) => OAuthProvidersMap;
 export declare const getOAuthServices: (value: unknown) => OAuthServiceName[];
-export declare const getOAuthServiceSummaries: (value: unknown) => Array<Pick<OAuthProviderRecord, "service" | "email" | "phone" | "fullName" | "avatar" | "linkedAt" | "updatedAt">>;
+export declare const getOAuthServiceSummaries: (value: unknown) => Array<Pick<OAuthProviderRecord, 'service' | 'email' | 'phone' | 'fullName' | 'avatar' | 'linkedAt' | 'updatedAt'>>;
 export declare const verifiedOAuthIdentity: (identity: OAuthIdentity) => OAuthIdentity;
 export declare const buildOAuthProviderRecord: (identity: OAuthIdentity, linkedAt?: string) => OAuthProviderRecord;
 export declare const withOAuthProvider: (value: unknown, identity: OAuthIdentity) => OAuthProvidersMap;
